@@ -150,7 +150,7 @@ export default function App() {
             <div className="container mx-auto max-w-6xl">
               <div className="text-center mb-16">
                 <h2 className="text-4xl font-black text-[#141923] mb-4 tracking-tight">Como Funciona</h2>
-                <p className="text-lg text-gray-500 max-w-2xl mx-auto">Três passos simples para automatizar suas vistorias e inspeções.</p>
+                <p className="text-lg text-gray-500 max-w-2xl mx-auto">Três passos simples para automatizar as suas vistorias e inspeções.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
                 <div className="bg-white rounded-[2rem] p-10 border border-gray-100 shadow-sm hover:shadow-xl transition-all">
@@ -158,14 +158,14 @@ export default function App() {
                     <span className="text-2xl font-black text-[#0F3460]">1</span>
                   </div>
                   <h3 className="text-2xl font-black text-[#141923] mb-3 tracking-tight">Capturar Foto</h3>
-                  <p className="text-gray-500 leading-relaxed">Tire fotos de entrada e saída de cada ambiente ou canteiro de obras.</p>
+                  <p className="text-gray-500 leading-relaxed">Tire fotos de entrada e saída de cada ambiente ou estaleiro de obras.</p>
                 </div>
                 <div className="bg-white rounded-[2rem] p-10 border border-gray-100 shadow-sm hover:shadow-xl transition-all">
                   <div className="w-14 h-14 bg-[#4CAF8C]/10 rounded-2xl flex items-center justify-center mb-6">
                     <span className="text-2xl font-black text-[#4CAF8C]">2</span>
                   </div>
                   <h3 className="text-2xl font-black text-[#141923] mb-3 tracking-tight">Processamento IA</h3>
-                  <p className="text-gray-500 leading-relaxed">Nossa IA analisa as imagens, detecta objetos (ferramentas, EPIs, móveis) e compara o estado.</p>
+                  <p className="text-gray-500 leading-relaxed">A nossa IA analisa as imagens, deteta objetos (ferramentas, EPIs, móveis) e compara o estado.</p>
                 </div>
                 <div className="bg-white rounded-[2rem] p-10 border border-gray-100 shadow-sm hover:shadow-xl transition-all">
                   <div className="w-14 h-14 bg-[#0F3460]/10 rounded-2xl flex items-center justify-center mb-6">
@@ -199,7 +199,7 @@ export default function App() {
             <div className="container mx-auto max-w-6xl">
               <div className="text-center mb-16">
                 <h2 className="text-4xl font-black text-[#141923] mb-4 tracking-tight">Recursos Principais</h2>
-                <p className="text-lg text-gray-500 max-w-2xl mx-auto">Tudo o que você precisa para gerenciar inspeções como um profissional.</p>
+                <p className="text-lg text-gray-500 max-w-2xl mx-auto">Tudo o que precisa para gerir inspeções como um profissional.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                 <div className="flex gap-6 bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
@@ -212,11 +212,11 @@ export default function App() {
                 </div>
                 <div className="flex gap-6 bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                   <div className="flex-shrink-0"><div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-[#0F3460]/10"><BarChart3 className="h-8 w-8 text-[#0F3460]" /></div></div>
-                  <div><h3 className="text-xl font-black text-[#141923] tracking-tight">Controle de Inventário</h3><p className="text-gray-500 mt-2 leading-relaxed">Contagem automática de ferramentas, EPIs e verificação de presença de móveis.</p></div>
+                  <div><h3 className="text-xl font-black text-[#141923] tracking-tight">Controlo de Inventário</h3><p className="text-gray-500 mt-2 leading-relaxed">Contagem automática de ferramentas, EPIs e verificação de presença de móveis.</p></div>
                 </div>
                 <div className="flex gap-6 bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100">
                   <div className="flex-shrink-0"><div className="flex items-center justify-center h-16 w-16 rounded-2xl bg-[#4CAF8C]/10"><Users className="h-8 w-8 text-[#4CAF8C]" /></div></div>
-                  <div><h3 className="text-xl font-black text-[#141923] tracking-tight">Para Equipes e Obras</h3><p className="text-gray-500 mt-2 leading-relaxed">Sistema desenvolvido para ser usado tanto em canteiros de obra quanto em propriedades prontas.</p></div>
+                  <div><h3 className="text-xl font-black text-[#141923] tracking-tight">Para Equipas e Obras</h3><p className="text-gray-500 mt-2 leading-relaxed">Sistema desenvolvido para ser usado tanto em estaleiros de obra quanto em propriedades prontas.</p></div>
                 </div>
               </div>
             </div>
@@ -241,7 +241,7 @@ export default function App() {
                   <h4 className="font-black text-[#141923] mb-4 uppercase tracking-widest text-xs">Empresa</h4>
                   <ul className="space-y-3 text-sm text-gray-500 font-medium">
                     <li><a href="#" className="hover:text-[#4CAF8C] transition-colors">Sobre</a></li>
-                    <li><a href="#" className="hover:text-[#4CAF8C] transition-colors">Contato</a></li>
+                    <li><a href="#" className="hover:text-[#4CAF8C] transition-colors">Contacto</a></li>
                   </ul>
                 </div>
                 <div>
