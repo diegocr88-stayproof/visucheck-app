@@ -35,7 +35,7 @@ async function analyzeSinglePair(
   matrixUrl: string,
   exitUrl: string
 ): Promise<{ findings: any[]; conformities: string[]; score: number }> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const [matrixB64, exitB64] = await Promise.all([
     imageUrlToBase64(matrixUrl),
@@ -154,7 +154,7 @@ export async function analyzeItemPhotos(
   matrixPhotos: { url: string }[],
   exitPhotos: { url: string }[]
 ): Promise<AnalysisResult> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const matrixParts = await Promise.all(
     matrixPhotos.map(async p => ({
