@@ -41,16 +41,14 @@ export default function Navbar() {
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-      background: isHome ? 'rgba(11,45,82,0.95)' : 'white',
+      background: isHome ? 'rgba(11,45,82,0.97)' : 'white',
       borderBottom: isHome ? 'none' : '1px solid var(--border)',
       backdropFilter: 'blur(12px)',
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}
-        <div style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate(user ? '/dashboard' : '/')}>
-          <Logo dark={!isHome} />
-        </div>
+        <Logo light={isHome} size="md" />
 
         {/* Desktop nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className="desktop-nav">
@@ -76,9 +74,6 @@ export default function Navbar() {
                   <button onClick={() => { navigate('/dashboard'); setMenuOpen(false) }} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     🏠 Dashboard
                   </button>
-                  <button onClick={() => { navigate('/profile'); setMenuOpen(false) }} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    👤 Perfil
-                  </button>
                   <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
                   <button onClick={handleLogout} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     🚪 Sair
@@ -100,9 +95,9 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button onClick={() => setMobileOpen(!mobileOpen)} style={{
-          display: 'none', background: 'none', border: 'none', cursor: 'pointer',
-          padding: '8px', borderRadius: '8px', color: isHome ? 'white' : 'var(--navy)',
-          fontSize: '22px',
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '8px', borderRadius: '8px',
+          color: isHome ? 'white' : 'var(--navy)', fontSize: '22px',
         }} className="mobile-menu-btn">
           {mobileOpen ? '✕' : '☰'}
         </button>
@@ -110,7 +105,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div style={{ background: 'white', borderTop: '1px solid var(--border)', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ background: 'white', borderTop: '1px solid var(--border)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {user ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}>
@@ -124,9 +119,6 @@ export default function Navbar() {
               </div>
               <button onClick={() => { navigate('/dashboard'); setMobileOpen(false) }} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: 'var(--cream)', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 🏠 Dashboard
-              </button>
-              <button onClick={() => { navigate('/profile'); setMobileOpen(false) }} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: 'var(--cream)', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                👤 Perfil
               </button>
               <button onClick={handleLogout} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: '#FDECEA', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 🚪 Sair
@@ -145,11 +137,10 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* CSS para mobile/desktop toggle */}
       <style>{`
         @media (max-width: 768px) {
           .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
+          .mobile-menu-btn { display: flex !important; }
         }
         @media (min-width: 769px) {
           .mobile-menu-btn { display: none !important; }

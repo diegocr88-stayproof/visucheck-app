@@ -1,14 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 
-export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+export default function Logo({ size = 'md', light = false }: { size?: 'sm' | 'md' | 'lg'; light?: boolean }) {
   const navigate = useNavigate()
-  
+
   const sizes = {
     sm: { mark: 28, font: '16px', radius: '6px' },
     md: { mark: 36, font: '20px', radius: '8px' },
     lg: { mark: 44, font: '26px', radius: '10px' },
   }
-
   const s = sizes[size]
 
   return (
@@ -18,10 +17,11 @@ export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
     >
       <div style={{
         width: s.mark, height: s.mark,
-        background: 'var(--navy)',
+        background: light ? 'rgba(255,255,255,0.15)' : 'var(--navy)',
         borderRadius: s.radius,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative', overflow: 'hidden', flexShrink: 0,
+        border: light ? '1px solid rgba(255,255,255,0.2)' : 'none',
       }}>
         <div style={{
           position: 'absolute', bottom: '-4px', right: '-4px',
@@ -37,10 +37,10 @@ export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
         fontFamily: 'Syne, sans-serif',
         fontSize: s.font,
         fontWeight: 800,
-        color: 'var(--navy)',
+        color: light ? 'white' : 'var(--navy)',
         letterSpacing: '-0.5px',
       }}>
-        Visu<span style={{ color: 'var(--green-dark)' }}>Check</span>
+        Visu<span style={{ color: 'var(--green)' }}>Check</span>
       </span>
     </div>
   )
