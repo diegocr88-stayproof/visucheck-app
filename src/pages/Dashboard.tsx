@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { supabase, Property, Inspection } from '../supabase'
+import { supabase } from '../supabase'
+
+type Property = { id: string; created_at: string; name: string; address: string | null; description: string | null; user_id: string }
+type Inspection = { id: string; created_at: string; property_id: string; type: 'entry' | 'exit'; status: 'pending' | 'processing' | 'completed' | 'failed'; user_id: string; report_url: string | null }
 
 type Tab = 'properties' | 'inspections'
 
