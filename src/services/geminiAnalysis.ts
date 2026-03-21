@@ -48,100 +48,80 @@ export async function analyzeRoomPhotos(
     }))
   )
 
-  const prompt = `Você é um auditor técnico especializado em inspeção visual de imóveis.
+  const prompt = `Voce e um perito forense especializado em vistoria de imoveis de aluguel por temporada.
 
-Você receberá fotos do cômodo "${roomName}" em duas etapas:
-- IMAGENS DE REFERÊNCIA (estado original): as primeiras ${matrixPhotos.length} imagem(ns)
-- IMAGENS ATUAIS (após uso pelo inquilino): as últimas ${exitPhotos.length} imagem(ns)
+CONTEXTO: Voce ira comparar fotos do comodo "${roomName}" em dois momentos diferentes.
 
-Sua função é comparar as imagens e identificar com precisão qualquer divergência.
+ETAPA 1 - INVENTARIO DA REFERENCIA:
+Analise APENAS as imagens de referencia (estado original) e crie um inventario mental COMPLETO de TODOS os objetos visiveis:
+- Moveis grandes (sofas, mesas, cadeiras, camas, armarios, estantes)
+- Objetos medios (luminárias, plantas, quadros, espelhos, tapetes, almofadas)
+- Objetos pequenos (vasos, bibelôs, livros, garrafas, copos, utensilios, decoracoes, itens sobre mesas)
+- Eletrodomesticos e eletronicos (TV, geladeira, microondas, ventiladores, ar-condicionado)
+- Estado das superficies (paredes, piso, teto, janelas, portas)
 
----
-PASSO 1 — INVENTÁRIO MENTAL DA REFERÊNCIA:
-Antes de comparar, liste mentalmente TODOS os elementos visíveis nas imagens originais:
-- Móveis (sofá, mesa, cadeiras, armários, camas, estantes...)
-- Objetos pequenos (vasos, quadros, almofadas, tapetes, luminárias, bibelôs, plantas...)
-- Superfícies (paredes, piso, teto — cor, textura, estado)
-- Estrutura (portas, janelas, rodapés, acabamentos)
-- Acessórios (cortinas, persianas, espelhos, porta-retratos...)
+ETAPA 2 - VERIFICACAO NO ESTADO ATUAL:
+Agora analise as imagens atuais e para CADA item do seu inventario, verifique:
+a) O item ESTA PRESENTE na imagem atual? (mesmo que em posicao diferente)
+b) Se presente: ha danos, manchas ou desgaste excessivo?
+c) Se ausente: registre como ITEM FALTANTE
 
-PASSO 2 — COMPARAÇÃO COM O ESTADO ATUAL:
-Compare cada elemento da lista acima com as imagens atuais e identifique:
+REGRAS CRITICAS:
+- IGNORE completamente diferencas de iluminacao, sombra, angulo de camera e qualidade da foto
+- IGNORE small repositioning of objects (um objeto movido alguns centimetros NAO e faltante)
+- Um objeto so e "faltante" se NAO APARECER em nenhuma parte das fotos atuais
+- Nao invente itens "adicionados" baseado em angulos diferentes - so reporte adicoes OBVIAS e CERTAS
+- Seja CONSERVADOR com falsos positivos: na duvida, NAO reporte como faltante
+- Seja RIGOROSO com itens claramente visiveis na referencia e ausentes na atual
 
-a) ITENS FALTANTES — estavam na referência e não estão mais
-b) ITENS DANIFICADOS — permanecem mas com riscos, quebras, deformações ou desgaste excessivo
-c) MANCHAS E SUJIDADE — manchas em paredes, sujeira no piso, marcas em móveis
-d) ALTERAÇÕES ESTRUTURAIS — paredes, portas, janelas, pisos, tetos, revestimentos
-e) ITENS ADICIONADOS — não existiam antes e aparecem agora (informativo)
-
----
-REGRAS OBRIGATÓRIAS:
-- IGNORE diferenças de iluminação, sombra ou ângulo de câmera
-- IGNORE pequenas mudanças de posição dos objetos
-- FOQUE em: presença, ausência e estado de conservação
-- NÃO assuma nada que não esteja claramente visível
-- Seja conservador: só reporte o que tiver evidência visual clara
-- Objetos pequenos de decoração TAMBÉM contam como itens faltantes
-
-REVISÃO FINAL (antes de responder, verifique):
-✓ Comparou TODOS os cantos da imagem?
-✓ Verificou superfícies (paredes, piso, teto)?
-✓ Analisou objetos pequenos e decorações?
-✓ Deixou passar algum item presente na referência?
-
----
-Responda APENAS em JSON válido, sem markdown, sem texto extra:
+FORMATO DE RESPOSTA - apenas JSON valido, sem markdown:
 {
   "score": 85,
   "condition": "good",
-  "summary": "Resumo técnico detalhado da comparação entre estado original e atual.",
+  "summary": "Descricao tecnica detalhada comparando os dois estados. Mencione os principais itens presentes, o que mudou e a condicao geral.",
   "findings": [
     {
       "type": "missing_item",
       "severity": "medium",
-      "description": "Descrição técnica clara do que foi identificado",
-      "location": "Localização exata no ambiente (ex: parede norte, canto esquerdo)"
+      "description": "Descricao especifica e objetiva do item ausente",
+      "location": "Localizacao precisa onde o item estava na foto original"
     }
   ],
   "conformities": [
-    "Sofá 3 lugares — presente e em bom estado",
-    "Piso — sem danos ou manchas visíveis"
+    "Item especifico — presente e em bom estado"
   ]
 }
 
-Regras de pontuação:
-- 100 = ambiente idêntico ao original
-- Desconte 8-15 pontos por item faltante
-- Desconte 3-8 por dano físico
+PONTUACAO:
+- 100 = identico ao original
+- Desconte 10-20 por item faltante de valor (movel, eletronico)
+- Desconte 5-10 por item faltante pequeno (decoracao, utensilio)
+- Desconte 3-8 por dano fisico
 - Desconte 2-5 por mancha ou sujeira
-- condition: "good" (score >= 75), "warning" (50-74), "critical" (< 50)
+- condition: "good" (>=75), "warning" (50-74), "critical" (<50)
 - type: "missing_item", "physical_damage", "stain", "structural" ou "added_item"
-- severity: "low" (cosmético/decoração pequena), "medium" (visível/reparável), "high" (sério/custoso)
-- Escreva TUDO em português brasileiro`
+- severity: "low" (decoracao pequena), "medium" (item de valor moderado), "high" (item de alto valor ou dano grave)
+- Escreva TUDO em portugues brasileiro
+- Na lista de conformities, inclua apenas itens ESPECIFICOS que estavam na referencia e continuam presentes`
 
   try {
     const result = await model.generateContent([
-      { text: `=== IMAGENS DE REFERÊNCIA (estado original do cômodo ${roomName}) ===` },
+      { text: `=== IMAGENS DE REFERENCIA - ESTADO ORIGINAL DO COMODO "${roomName}" ===` },
       ...matrixParts,
-      { text: `=== IMAGENS ATUAIS (estado após uso pelo inquilino) ===` },
+      { text: `=== IMAGENS ATUAIS - ESTADO APOS USO PELO INQUILINO ===` },
       ...exitParts,
       { text: prompt },
     ])
     const text = result.response.text()
     const clean = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
-    return {
-      ...parsed,
-      conformities: parsed.conformities || [],
-    }
+    return { ...parsed, conformities: parsed.conformities || [] }
   } catch (error) {
     console.error('Gemini analysis error:', error)
     return {
-      score: 0,
-      condition: 'critical',
-      summary: 'Erro ao processar análise. Tente novamente.',
-      findings: [],
-      conformities: [],
+      score: 0, condition: 'critical',
+      summary: 'Erro ao processar analise. Tente novamente.',
+      findings: [], conformities: [],
     }
   }
 }
@@ -165,58 +145,58 @@ export async function analyzeItemPhotos(
     }))
   )
 
-  const prompt = `Você é um auditor técnico especializado em inspeção visual de imóveis.
+  const prompt = `Voce e um perito forense especializado em vistoria de imoveis de aluguel por temporada.
 
 Analise o objeto: "${itemName}"
-- IMAGEM DE REFERÊNCIA (estado original): as primeiras ${matrixPhotos.length} imagem(ns)
-- IMAGEM ATUAL (após uso): as últimas ${exitPhotos.length} imagem(ns)
 
-VERIFIQUE:
-1. O objeto está PRESENTE na imagem atual?
-   - Se NÃO: registre como item faltante com severity "high"
-2. Há danos visíveis? (riscos, quebras, manchas, deformações)
-3. Algum acessório ou parte do objeto está faltando?
-4. O desgaste é além do normal?
+IMAGENS DE REFERENCIA: estado original do objeto
+IMAGENS ATUAIS: estado apos uso pelo inquilino
 
-REVISÃO: Você confirmou claramente se o objeto está presente ou ausente?
+ETAPA 1 - INVENTARIO DO OBJETO NA REFERENCIA:
+Descreva mentalmente o objeto: cor, tamanho aparente, estado, acessorios visiveis, localizacao.
 
-Responda APENAS em JSON válido, sem markdown:
+ETAPA 2 - VERIFICACAO NO ESTADO ATUAL:
+O objeto "${itemName}" esta CLARAMENTE VISIVEL nas imagens atuais?
+- SIM: verifique danos, manchas, pecas faltando
+- NAO: registre como ITEM FALTANTE com severity "high"
+
+REGRAS:
+- IGNORE diferencas de iluminacao e angulo
+- So reporte como faltante se o objeto NAO aparecer nas fotos atuais
+- Seja objetivo e preciso
+
+FORMATO - apenas JSON valido, sem markdown:
 {
   "score": 90,
   "condition": "good",
-  "summary": "Descrição técnica detalhada do estado atual comparado ao original.",
+  "summary": "Descricao objetiva do estado atual comparado ao original.",
   "findings": [],
   "conformities": ["${itemName} — presente e em bom estado"]
 }
 
-- score: 0-100 (100 = idêntico, 0 = ausente/destruído)
-- Se AUSENTE: score 0, condition "critical", finding type "missing_item" severity "high"
+- score: 0-100
+- Se AUSENTE: score 0, condition "critical", type "missing_item", severity "high"
 - condition: "good" (>=75), "warning" (50-74), "critical" (<50)
-- Escreva em português brasileiro`
+- Escreva em portugues brasileiro`
 
   try {
     const result = await model.generateContent([
-      { text: `=== IMAGEM DE REFERÊNCIA (estado original do objeto ${itemName}) ===` },
+      { text: `=== IMAGEM DE REFERENCIA - ESTADO ORIGINAL: "${itemName}" ===` },
       ...matrixParts,
-      { text: `=== IMAGEM ATUAL (estado após uso pelo inquilino) ===` },
+      { text: `=== IMAGEM ATUAL - ESTADO APOS USO ===` },
       ...exitParts,
       { text: prompt },
     ])
     const text = result.response.text()
     const clean = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
-    return {
-      ...parsed,
-      conformities: parsed.conformities || [],
-    }
+    return { ...parsed, conformities: parsed.conformities || [] }
   } catch (error) {
     console.error('Gemini analysis error:', error)
     return {
-      score: 0,
-      condition: 'critical',
-      summary: 'Erro ao processar análise. Tente novamente.',
-      findings: [],
-      conformities: [],
+      score: 0, condition: 'critical',
+      summary: 'Erro ao processar analise. Tente novamente.',
+      findings: [], conformities: [],
     }
   }
 }
