@@ -1,215 +1,160 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabase'
 import Logo from './Logo'
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const [user, setUser] = useState<any>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const isHome = location.pathname === '/'
 
   useEffect(() => {
-    // Pega sessão atual
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
-    })
-
-    // Escuta mudanças de auth em tempo real
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user ?? null)
     })
-
-    return () => listener.subscription.unsubscribe()
+    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
-    setMenuOpen(false)
     navigate('/')
   }
 
-  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
-  const userInitial = userName.charAt(0).toUpperCase()
+  const username = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário'
+  const initials = username.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
 
   return (
     <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 48px', height: '72px',
-      background: 'rgba(244,246,249,0.92)',
-      backdropFilter: 'blur(16px)',
-      borderBottom: '1px solid var(--border)',
-      boxShadow: scrolled ? '0 2px 24px rgba(11,45,82,0.1)' : 'none',
-      transition: 'box-shadow 0.3s',
+      background: isHome ? 'rgba(11,45,82,0.95)' : 'white',
+      borderBottom: isHome ? 'none' : '1px solid var(--border)',
+      backdropFilter: 'blur(12px)',
     }}>
-      <Logo size="md" />
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
-      {isHome && (
-        <ul style={{
-          display: 'flex', alignItems: 'center', gap: '36px',
-          listStyle: 'none', margin: 0, padding: 0,
-        }}>
-          {[
-            { label: 'Como funciona', href: '#features' },
-            { label: 'Recursos', href: '#recursos' },
-            { label: 'Planos', href: '#pricing' },
-          ].map(item => (
-            <li key={item.label}>
-              <a href={item.href} style={{
-                fontSize: '14px', fontWeight: 500,
-                color: 'var(--muted)', textDecoration: 'none',
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--navy)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+        {/* Logo */}
+        <div style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate(user ? '/dashboard' : '/')}>
+          <Logo dark={!isHome} />
+        </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {user ? (
-          // LOGADO — mostra avatar + menu
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              style={{
+        {/* Desktop nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className="desktop-nav">
+          {user ? (
+            <div ref={dropdownRef} style={{ position: 'relative' }}>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '6px 14px 6px 6px', borderRadius: '100px',
-                background: 'white', border: '1.5px solid var(--border)',
-                cursor: 'pointer', transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--navy)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '50%',
-                background: 'var(--navy)', color: 'white',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'Syne, sans-serif', fontSize: '14px', fontWeight: 700,
+                background: isHome ? 'rgba(255,255,255,0.1)' : 'var(--cream)',
+                border: isHome ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--border)',
+                borderRadius: '100px', padding: '6px 16px 6px 6px', cursor: 'pointer',
               }}>
-                {userInitial}
-              </div>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--navy)' }}>
-                {userName.split(' ')[0]}
-              </span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
-                style={{ transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                <path d="M2 4l4 4 4-4" stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-
-            {/* Dropdown menu */}
-            {menuOpen && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                background: 'white', borderRadius: '14px', padding: '8px',
-                boxShadow: '0 8px 32px rgba(11,45,82,0.15)',
-                border: '1px solid var(--border)', minWidth: '200px',
-                zIndex: 200, animation: 'fadeInUp 0.15s ease both',
-              }}>
-                {/* User info */}
-                <div style={{ padding: '10px 12px 14px', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--navy)' }}>{userName}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{user.email}</div>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--navy)', flexShrink: 0 }}>
+                  {initials}
                 </div>
+                <span style={{ fontSize: '14px', fontWeight: 500, color: isHome ? 'white' : 'var(--navy)', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {username}
+                </span>
+                <span style={{ fontSize: '10px', color: isHome ? 'rgba(255,255,255,0.6)' : 'var(--muted)' }}>▼</span>
+              </button>
 
-                {/* Menu items */}
-                {[
-                  { icon: '🏠', label: 'Dashboard', action: () => { navigate('/dashboard'); setMenuOpen(false) } },
-                ].map(item => (
-                  <button key={item.label} onClick={item.action} style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', borderRadius: '8px', fontSize: '14px',
-                    color: 'var(--navy)', background: 'none', border: 'none',
-                    cursor: 'pointer', textAlign: 'left', transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--cream)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    <span>{item.icon}</span> {item.label}
+              {menuOpen && (
+                <div style={{ position: 'absolute', top: '48px', right: 0, background: 'white', borderRadius: '14px', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(11,45,82,0.15)', padding: '8px', minWidth: '180px', zIndex: 200 }}>
+                  <button onClick={() => { navigate('/dashboard'); setMenuOpen(false) }} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🏠 Dashboard
                   </button>
-                ))}
-
-                {/* Logout */}
-                <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px' }}>
-                  <button onClick={handleLogout} style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', borderRadius: '8px', fontSize: '14px',
-                    color: '#C0392B', background: 'none', border: 'none',
-                    cursor: 'pointer', textAlign: 'left', transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#FDECEA')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    <span>🚪</span> Sair da conta
+                  <button onClick={() => { navigate('/profile'); setMenuOpen(false) }} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    👤 Perfil
+                  </button>
+                  <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+                  <button onClick={handleLogout} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none', background: 'none', textAlign: 'left', fontSize: '14px', cursor: 'pointer', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🚪 Sair
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          // NÃO LOGADO — mostra botões de login
-          <>
-            <button
-              onClick={() => navigate('/login')}
-              style={{
-                padding: '10px 22px', borderRadius: '8px',
-                fontSize: '14px', fontWeight: 500,
-                background: 'transparent', color: 'var(--navy)',
-                border: 'none', cursor: 'pointer',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(11,45,82,0.06)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              Entrar
-            </button>
-            <button
-              onClick={() => navigate('/login')}
-              style={{
-                padding: '10px 22px', borderRadius: '8px',
-                fontSize: '14px', fontWeight: 500,
-                background: 'var(--navy)', color: 'white',
-                border: 'none', cursor: 'pointer',
-                boxShadow: '0 2px 12px rgba(11,45,82,0.25)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'var(--navy-mid)'
-                e.currentTarget.style.transform = 'translateY(-1px)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--navy)'
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
-            >
-              Começar grátis
-            </button>
-          </>
-        )}
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => navigate('/login')} style={{ padding: '9px 20px', borderRadius: '8px', fontSize: '14px', fontWeight: 500, background: 'transparent', color: isHome ? 'white' : 'var(--navy)', border: isHome ? '1px solid rgba(255,255,255,0.3)' : '1.5px solid var(--border)', cursor: 'pointer' }}>
+                Entrar
+              </button>
+              <button onClick={() => navigate('/login')} style={{ padding: '9px 20px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer' }}>
+                Começar grátis
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile hamburger */}
+        <button onClick={() => setMobileOpen(!mobileOpen)} style={{
+          display: 'none', background: 'none', border: 'none', cursor: 'pointer',
+          padding: '8px', borderRadius: '8px', color: isHome ? 'white' : 'var(--navy)',
+          fontSize: '22px',
+        }} className="mobile-menu-btn">
+          {mobileOpen ? '✕' : '☰'}
+        </button>
       </div>
 
-      {/* Fechar menu ao clicar fora */}
-      {menuOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 199 }}
-          onClick={() => setMenuOpen(false)}
-        />
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div style={{ background: 'white', borderTop: '1px solid var(--border)', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {user ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--border)', marginBottom: '8px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--navy)', flexShrink: 0 }}>
+                  {initials}
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--navy)' }}>{username}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{user.email}</div>
+                </div>
+              </div>
+              <button onClick={() => { navigate('/dashboard'); setMobileOpen(false) }} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: 'var(--cream)', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                🏠 Dashboard
+              </button>
+              <button onClick={() => { navigate('/profile'); setMobileOpen(false) }} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: 'var(--cream)', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                👤 Perfil
+              </button>
+              <button onClick={handleLogout} style={{ padding: '12px 16px', borderRadius: '10px', border: 'none', background: '#FDECEA', textAlign: 'left', fontSize: '15px', cursor: 'pointer', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                🚪 Sair
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { navigate('/login'); setMobileOpen(false) }} style={{ padding: '13px 16px', borderRadius: '10px', border: '1.5px solid var(--border)', background: 'transparent', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', fontWeight: 500 }}>
+                Entrar
+              </button>
+              <button onClick={() => { navigate('/login'); setMobileOpen(false) }} style={{ padding: '13px 16px', borderRadius: '10px', border: 'none', background: 'var(--green)', fontSize: '15px', cursor: 'pointer', color: 'var(--navy)', fontWeight: 700 }}>
+                Começar grátis
+              </button>
+            </>
+          )}
+        </div>
       )}
+
+      {/* CSS para mobile/desktop toggle */}
+      <style>{`
+        @media (max-width: 768px) {
+          .desktop-nav { display: none !important; }
+          .mobile-menu-btn { display: block !important; }
+        }
+        @media (min-width: 769px) {
+          .mobile-menu-btn { display: none !important; }
+        }
+      `}</style>
     </nav>
   )
 }
