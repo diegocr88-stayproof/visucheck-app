@@ -55,7 +55,7 @@ export default function Navbar() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/login')}
           style={{
             padding: '10px 22px', borderRadius: '8px',
             fontSize: '14px', fontWeight: 500,
