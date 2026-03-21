@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar'
 import { supabase } from '../supabase'
 
 type Property = { id: string; created_at: string; name: string; address: string | null; description: string | null; user_id: string }
-type Inspection = { id: string; created_at: string; property_id: string; type: 'entry' | 'exit'; status: 'pending' | 'processing' | 'completed' | 'failed'; user_id: string; report_url: string | null }
+type Inspection = { id: string; created_at: string; property_id: string; type: 'exit'; status: 'pending' | 'processing' | 'completed' | 'failed'; user_id: string; report_url: string | null }
 type Tab = 'properties' | 'inspections'
 type ModalType = 'none' | 'addProperty' | 'addInspection'
 
@@ -19,7 +19,6 @@ export default function Dashboard() {
   const [propName, setPropName] = useState('')
   const [propAddress, setPropAddress] = useState('')
   const [propDesc, setPropDesc] = useState('')
-  const [inspType, setInspType] = useState<'entry' | 'exit'>('entry')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
@@ -63,13 +62,13 @@ export default function Dashboard() {
     if (!user) return
     const { data, error } = await supabase.from('inspections').insert({
       property_id: selectedPropertyId,
-      type: inspType,
+      type: 'exit',
       status: 'pending',
       user_id: user.id,
     }).select().single()
     setSaving(false)
     if (!error && data) {
-      setSelectedPropertyId(''); setInspType('entry')
+      setSelectedPropertyId('')
       setModal('none')
       navigate(`/inspection/${data.id}/upload`)
     }
@@ -187,14 +186,8 @@ export default function Dashboard() {
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
                           <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--green-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>🏠</div>
                           <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
-                            <button style={s.btnOutline}
-                              onClick={() => navigate(`/property/${p.id}/setup`)}>
-                              ⚙️
-                            </button>
-                            <button style={s.btnOutline}
-                              onClick={() => { setSelectedPropertyId(p.id); setModal('addInspection') }}>
-                              + Vistoria
-                            </button>
+                            <button style={s.btnOutline} onClick={() => navigate(`/property/${p.id}/setup`)}>⚙️</button>
+                            <button style={s.btnOutline} onClick={() => { setSelectedPropertyId(p.id); setModal('addInspection') }}>+ Vistoria</button>
                           </div>
                         </div>
                         <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '17px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{p.name}</h3>
@@ -238,9 +231,7 @@ export default function Dashboard() {
                           onClick={() => navigate(`/inspection/${insp.id}/upload`)}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
-                              🚪
-                            </div>
+                            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>🚪</div>
                             <div>
                               <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '15px', fontWeight: 700, color: 'var(--navy)' }}>
                                 {getPropertyName(insp.property_id)}
