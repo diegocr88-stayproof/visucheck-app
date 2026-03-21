@@ -35,7 +35,7 @@ export async function analyzeRoomPhotos(
   matrixPhotos: { position: string; url: string }[],
   exitPhotos: { position: string; url: string }[]
 ): Promise<AnalysisResult> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   // Converte fotos para base64
   const matrixParts = await Promise.all(
