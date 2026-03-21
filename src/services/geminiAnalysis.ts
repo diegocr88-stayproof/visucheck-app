@@ -48,74 +48,70 @@ export async function analyzeRoomPhotos(
     }))
   )
 
-  const prompt = `Voce e um perito forense especializado em vistoria de imoveis de aluguel por temporada.
+  const prompt = `Voce e um perito forense especializado em vistoria de imoveis.
 
 Voce recebeu ${matrixPhotos.length} fotos do ESTADO ORIGINAL e ${exitPhotos.length} fotos do ESTADO ATUAL do comodo "${roomName}".
-As fotos cobrem diferentes angulos do mesmo ambiente.
+As fotos foram tiradas nos MESMOS angulos — foto 1 original corresponde a foto 1 atual, foto 2 com foto 2, etc.
 
-INSTRUCOES:
+METODOLOGIA DE ANALISE:
 
-PASSO 1 - CONSTRUA O MODELO COMPLETO DO AMBIENTE:
-Analise TODAS as fotos originais juntas como se fossem uma visao 360 graus do comodo.
-Construa mentalmente um inventario UNICO e COMPLETO de todos os objetos presentes:
-- Nao duplique itens que aparecem em multiplas fotos
-- Um capacete visivel em 3 fotos = 1 capacete (ou mais, se claramente forem unidades diferentes)
-- Conte com precisao: quantas cadeiras, quantos capacetes, quantos monitores, etc.
+ETAPA 1 — INVENTARIO DETALHADO DO ESTADO ORIGINAL:
+Analise cada foto original e liste TODOS os objetos visiveis com precisao:
+- Identifique cada objeto pelo nome, cor, tamanho e posicao exata
+- Inclua objetos grandes E pequenos
+- Inclua objetos sobre mesas, bancadas e superficies
+- Conte quantidades exatas (ex: "3 capacetes brancos", "2 garrafas")
+- Anote a posicao de cada objeto (ex: "sobre a mesa central, lado esquerdo")
 
-PASSO 2 - CONSTRUA O MODELO DO ESTADO ATUAL:
-Analise TODAS as fotos atuais juntas da mesma forma.
-Construa o inventario atual do ambiente.
+ETAPA 2 — INVENTARIO DO ESTADO ATUAL:
+Analise cada foto atual e liste TODOS os objetos visiveis da mesma forma.
 
-PASSO 3 - COMPARE OS DOIS MODELOS:
-Compare o inventario original com o atual e identifique:
-a) Itens presentes no original e AUSENTES no atual (item faltante)
-b) Itens com danos visiveis que nao existiam antes
-c) Manchas ou sujeira nova
-d) Alteracoes estruturais
+ETAPA 3 — COMPARACAO DIRETA:
+Compare os dois inventarios item por item:
+- Quais objetos estao NO ORIGINAL mas NAO APARECEM no atual? → ITEM FALTANTE
+- Quais objetos tem danos visiveis? → DANO FISICO
+- Quais superficies tem manchas novas? → MANCHA
 
-REGRAS CRITICAS:
-- Cada item faltante deve aparecer APENAS UMA VEZ no relatorio, mesmo que visivel em multiplas fotos originais
-- IGNORE diferencas de iluminacao, sombra, qualidade de foto e pequenas mudancas de angulo
-- IGNORE reposicionamentos menores de objetos
-- So reporte como faltante se tiver CERTEZA que o objeto nao aparece em NENHUMA das fotos atuais
-- Nao reporte "item adicionado" a menos que seja algo completamente novo e obviamente relevante
-- Seja conservador: na duvida, nao reporte
+REGRAS:
+- IGNORE diferencas de iluminacao, qualidade de foto e pequenas mudancas de angulo
+- Se um objeto estava claramente visivel no original e NAO aparece em NENHUMA foto atual → ITEM FALTANTE
+- Seja DETALHISTA: objetos pequenos sobre mesas, decoracoes, utensilios — tudo conta
+- NAO seja conservador: se o objeto nao esta visivel no atual, reporte
 
-Responda APENAS em JSON valido, sem markdown, sem texto extra:
+Responda APENAS em JSON valido, sem markdown:
 {
   "score": 85,
   "condition": "good",
-  "summary": "Descricao tecnica objetiva. Mencione o que foi encontrado de diferente entre os dois estados.",
+  "summary": "Descricao tecnica objetiva das diferencas encontradas.",
   "findings": [
     {
       "type": "missing_item",
       "severity": "medium",
-      "description": "Descricao especifica e unica do item ausente — nao repita o mesmo item",
-      "location": "Localizacao no ambiente onde o item estava na referencia"
+      "description": "Nome especifico e descricao do objeto ausente",
+      "location": "Localizacao exata onde estava no original"
     }
   ],
   "conformities": [
-    "Item especifico — presente e em bom estado"
+    "Objeto especifico — presente e em bom estado"
   ]
 }
 
 PONTUACAO:
 - 100 = identico ao original
-- Desconte 10-20 por item faltante de valor (movel, eletronico, equipamento)
-- Desconte 5-10 por item faltante pequeno (decoracao, utensilio)
-- Desconte 3-8 por dano fisico
-- Desconte 2-5 por mancha
+- Desconte 15 por item faltante de valor
+- Desconte 8 por item faltante pequeno
+- Desconte 5 por dano fisico
+- Desconte 3 por mancha
 - condition: "good" (>=75), "warning" (50-74), "critical" (<50)
 - type: "missing_item", "physical_damage", "stain" ou "structural"
 - severity: "low", "medium" ou "high"
-- Escreva TUDO em portugues brasileiro
-- Na lista conformities inclua itens ESPECIFICOS que continuam presentes`
+- Escreva em portugues brasileiro`
 
   try {
     const result = await model.generateContent([
-      { text: `=== ESTADO ORIGINAL DO COMODO "${roomName}" (${matrixPhotos.length} fotos de angulos diferentes) ===` },
+      { text: `=== ESTADO ORIGINAL — ${matrixPhotos.length} FOTOS (foto 1, foto 2, foto 3, foto 4) ===` },
       ...matrixParts,
-      { text: `=== ESTADO ATUAL DO COMODO "${roomName}" (${exitPhotos.length} fotos de angulos diferentes) ===` },
+      { text: `=== ESTADO ATUAL — ${exitPhotos.length} FOTOS (mesmos angulos: foto 1, foto 2, foto 3, foto 4) ===` },
       ...exitParts,
       { text: prompt },
     ])
@@ -155,21 +151,24 @@ export async function analyzeItemPhotos(
   const prompt = `Voce e um perito forense em vistoria de imoveis.
 
 Analise o objeto: "${itemName}"
-IMAGENS ORIGINAIS = estado original
-IMAGENS ATUAIS = estado apos uso
 
-O objeto "${itemName}" esta CLARAMENTE VISIVEL em alguma das imagens atuais?
-- SIM: verifique danos, manchas, pecas faltando
-- NAO: registre como ITEM FALTANTE severity "high"
+ETAPA 1 — ESTADO ORIGINAL:
+Descreva o objeto em detalhe: cor, tamanho, estado, posicao, acessorios.
 
-IGNORE diferencas de iluminacao e angulo.
-So reporte como faltante se tiver CERTEZA absoluta.
+ETAPA 2 — ESTADO ATUAL:
+O objeto "${itemName}" esta VISIVELMENTE PRESENTE em alguma das fotos atuais?
+
+ETAPA 3 — CONCLUSAO:
+- Se PRESENTE: verifique danos, manchas, pecas faltando
+- Se AUSENTE: registre como ITEM FALTANTE severity "high"
+
+Se o objeto nao aparecer claramente nas fotos atuais → e FALTANTE.
 
 JSON valido, sem markdown:
 {
   "score": 90,
   "condition": "good",
-  "summary": "Descricao objetiva do estado atual comparado ao original.",
+  "summary": "Descricao objetiva do estado atual.",
   "findings": [],
   "conformities": ["${itemName} — presente e em bom estado"]
 }
