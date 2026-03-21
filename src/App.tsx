@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Welcome from './pages/Welcome'
 import PropertySetup from './pages/PropertySetup'
+import PropertyDetail from './pages/PropertyDetail'
 import InspectionUpload from './pages/InspectionUpload'
 import PrivateRoute from './components/PrivateRoute'
 
@@ -13,24 +14,19 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/welcome" element={
-        <PrivateRoute>
-          <Welcome />
-        </PrivateRoute>
+        <PrivateRoute><Welcome /></PrivateRoute>
       } />
       <Route path="/dashboard" element={
-        <PrivateRoute>
-          <Dashboard />
-        </PrivateRoute>
+        <PrivateRoute><Dashboard /></PrivateRoute>
+      } />
+      <Route path="/property/:propertyId" element={
+        <PrivateRoute><PropertyDetail /></PrivateRoute>
       } />
       <Route path="/property/:propertyId/setup" element={
-        <PrivateRoute>
-          <PropertySetup />
-        </PrivateRoute>
+        <PrivateRoute><PropertySetup /></PrivateRoute>
       } />
       <Route path="/inspection/:inspectionId/upload" element={
-        <PrivateRoute>
-          <InspectionUpload />
-        </PrivateRoute>
+        <PrivateRoute><InspectionUpload /></PrivateRoute>
       } />
     </Routes>
   )

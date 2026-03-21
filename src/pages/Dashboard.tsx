@@ -179,16 +179,17 @@ export default function Dashboard() {
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
                     {properties.map(p => (
-                      <div key={p.id} style={{ ...s.card }}
+                      <div key={p.id} style={{ ...s.card, cursor: 'pointer' }}
+                        onClick={() => navigate(`/property/${p.id}`)}
                         onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 32px rgba(11,45,82,0.12)')}
                         onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
                       >
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
                           <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--green-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>🏠</div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
                             <button style={s.btnOutline}
                               onClick={() => navigate(`/property/${p.id}/setup`)}>
-                              ⚙️ Configurar
+                              ⚙️
                             </button>
                             <button style={s.btnOutline}
                               onClick={() => { setSelectedPropertyId(p.id); setModal('addInspection') }}>
@@ -199,8 +200,9 @@ export default function Dashboard() {
                         <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '17px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{p.name}</h3>
                         {p.address && <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '4px' }}>📍 {p.address}</p>}
                         {p.description && <p style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '8px', lineHeight: 1.5 }}>{p.description}</p>}
-                        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--muted)' }}>
-                          {inspections.filter(i => i.property_id === p.id).length} vistoria(s) registrada(s)
+                        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{inspections.filter(i => i.property_id === p.id).length} vistoria(s)</span>
+                          <span style={{ color: 'var(--navy)', fontWeight: 600 }}>Ver detalhes →</span>
                         </div>
                       </div>
                     ))}
@@ -237,14 +239,14 @@ export default function Dashboard() {
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                             <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
-                              {insp.type === 'entry' ? '🔑' : '🚪'}
+                              🚪
                             </div>
                             <div>
                               <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '15px', fontWeight: 700, color: 'var(--navy)' }}>
                                 {getPropertyName(insp.property_id)}
                               </div>
                               <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>
-                                {insp.type === 'entry' ? 'Vistoria de Entrada' : 'Vistoria de Saída'} • {new Date(insp.created_at).toLocaleDateString('pt-BR')}
+                                Vistoria de Saída • {new Date(insp.created_at).toLocaleDateString('pt-BR')}
                               </div>
                             </div>
                           </div>
@@ -271,16 +273,10 @@ export default function Dashboard() {
 
       {/* MODALS */}
       {modal !== 'none' && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 200,
-          background: 'rgba(11,45,82,0.5)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-        }} onClick={() => setModal('none')}>
-          <div style={{
-            background: 'white', borderRadius: '20px', padding: '36px',
-            width: '100%', maxWidth: '480px',
-            boxShadow: '0 24px 80px rgba(11,45,82,0.25)',
-          }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(11,45,82,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+          onClick={() => setModal('none')}>
+          <div style={{ background: 'white', borderRadius: '20px', padding: '36px', width: '100%', maxWidth: '480px', boxShadow: '0 24px 80px rgba(11,45,82,0.25)' }}
+            onClick={e => e.stopPropagation()}>
 
             {modal === 'addProperty' && (
               <>
@@ -310,7 +306,7 @@ export default function Dashboard() {
 
             {modal === 'addInspection' && (
               <>
-                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>Nova Vistoria</h2>
+                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>Nova Vistoria de Saída</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div>
                     <label style={s.label}>Imóvel *</label>
@@ -321,17 +317,13 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label style={s.label}>Tipo de vistoria *</label>
-                    <select style={s.select} value={inspType} onChange={e => setInspType(e.target.value as 'entry' | 'exit')}>
-                      <option value="entry">🔑 Entrada</option>
-                      <option value="exit">🚪 Saída</option>
-                    </select>
+                  <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'var(--green-glow)', border: '1px solid rgba(46,204,138,0.25)', fontSize: '13px', color: 'var(--navy)' }}>
+                    📸 As fotos serão comparadas com as fotos originais do imóvel pela IA
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                     <button style={{ ...s.btnOutline, flex: 1 }} onClick={() => setModal('none')}>Cancelar</button>
                     <button style={{ ...s.btnGreen, flex: 2, justifyContent: 'center' }} onClick={handleAddInspection} disabled={saving}>
-                      {saving ? 'Salvando...' : 'Criar vistoria'}
+                      {saving ? 'Criando...' : 'Iniciar vistoria'}
                     </button>
                   </div>
                 </div>
