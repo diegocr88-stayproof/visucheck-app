@@ -9,20 +9,17 @@ type AnalysisResult = {
   score: number
   findings: { type: string; severity: string; description: string; location: string }[]
   summary: string
+  conformities: string[]
 }
 
-type Room = { id: string; name: string }
-type Item = { id: string; name: string }
-type Photo = { id: string; room_id: string | null; item_id: string | null; position: string; photo_url: string }
-
 type RoomAnalysis = {
-  room: Room
+  room: { id: string; name: string }
   status: 'pending' | 'analyzing' | 'done' | 'error'
   result?: AnalysisResult
 }
 
 type ItemAnalysis = {
-  item: Item
+  item: { id: string; name: string }
   status: 'pending' | 'analyzing' | 'done' | 'error'
   result?: AnalysisResult
 }
@@ -46,13 +43,10 @@ export default function InspectionAnalysis() {
     const { data: insp } = await supabase.from('inspections').select('*').eq('id', inspectionId).single()
     if (!insp) return
     setInspection(insp)
-
     const { data: prop } = await supabase.from('properties').select('*').eq('id', insp.property_id).single()
     setProperty(prop)
-
     const { data: rooms } = await supabase.from('rooms').select('*').eq('property_id', insp.property_id)
     const { data: items } = await supabase.from('items').select('*').eq('property_id', insp.property_id)
-
     setRoomAnalyses((rooms || []).map(r => ({ room: r, status: 'pending' })))
     setItemAnalyses((items || []).map(i => ({ item: i, status: 'pending' })))
     setLoading(false)
@@ -67,85 +61,53 @@ export default function InspectionAnalysis() {
 
     const scores: number[] = []
 
-    // Analisa cada cômodo
+    // Analisa cômodos
     for (let i = 0; i < roomAnalyses.length; i++) {
       const ra = roomAnalyses[i]
+      setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'analyzing' } : r))
 
-      setRoomAnalyses(prev => prev.map((r, idx) =>
-        idx === i ? { ...r, status: 'analyzing' } : r
-      ))
-
-      const matrixForRoom = (matrixPhotos || [])
-        .filter(p => p.room_id === ra.room.id)
-        .map(p => ({ position: p.position, url: p.photo_url }))
-
-      const exitForRoom = (exitPhotos || [])
-        .filter(p => p.room_id === ra.room.id)
-        .map(p => ({ position: p.position, url: p.photo_url }))
+      const matrixForRoom = (matrixPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
+      const exitForRoom = (exitPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
 
       if (matrixForRoom.length === 0 && exitForRoom.length === 0) {
-        setRoomAnalyses(prev => prev.map((r, idx) =>
-          idx === i ? { ...r, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [] } } : r
-        ))
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] } } : r))
         continue
       }
 
       try {
         const result = await analyzeRoomPhotos(ra.room.name, matrixForRoom, exitForRoom)
         scores.push(result.score)
-        setRoomAnalyses(prev => prev.map((r, idx) =>
-          idx === i ? { ...r, status: 'done', result } : r
-        ))
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result } : r))
       } catch {
-        setRoomAnalyses(prev => prev.map((r, idx) =>
-          idx === i ? { ...r, status: 'error' } : r
-        ))
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'error' } : r))
       }
     }
 
-    // Analisa cada objeto
+    // Analisa objetos
     for (let i = 0; i < itemAnalyses.length; i++) {
       const ia = itemAnalyses[i]
+      setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'analyzing' } : item))
 
-      setItemAnalyses(prev => prev.map((item, idx) =>
-        idx === i ? { ...item, status: 'analyzing' } : item
-      ))
-
-      const matrixForItem = (matrixPhotos || [])
-        .filter(p => p.item_id === ia.item.id)
-        .map(p => ({ url: p.photo_url }))
-
-      const exitForItem = (exitPhotos || [])
-        .filter(p => p.item_id === ia.item.id)
-        .map(p => ({ url: p.photo_url }))
+      const matrixForItem = (matrixPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
+      const exitForItem = (exitPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
 
       if (matrixForItem.length === 0 && exitForItem.length === 0) {
-        setItemAnalyses(prev => prev.map((item, idx) =>
-          idx === i ? { ...item, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [] } } : item
-        ))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] } } : item))
         continue
       }
 
       try {
         const result = await analyzeItemPhotos(ia.item.name, matrixForItem, exitForItem)
         scores.push(result.score)
-        setItemAnalyses(prev => prev.map((item, idx) =>
-          idx === i ? { ...item, status: 'done', result } : item
-        ))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result } : item))
       } catch {
-        setItemAnalyses(prev => prev.map((item, idx) =>
-          idx === i ? { ...item, status: 'error' } : item
-        ))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'error' } : item))
       }
     }
 
-    // Calcula score geral
     const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 100
     setOverallScore(avg)
-
-    // Atualiza status da vistoria
     await supabase.from('inspections').update({ status: 'completed' }).eq('id', inspectionId)
-
     setAnalyzing(false)
     setDone(true)
   }
@@ -157,15 +119,15 @@ export default function InspectionAnalysis() {
   }[condition] || { bg: '#eee', color: '#333', label: condition })
 
   const getSeverityColor = (severity: string) => ({
-    low: '#F59E0B',
-    medium: '#EF4444',
-    high: '#991B1B',
+    low: '#F59E0B', medium: '#EF4444', high: '#991B1B',
   }[severity] || '#999')
 
   const getTypeLabel = (type: string) => ({
     missing_item: '📦 Item faltante',
     physical_damage: '🔨 Dano físico',
     stain: '🫧 Mancha/Sujeira',
+    structural: '🏗️ Alteração estrutural',
+    added_item: '➕ Item adicionado',
     general_condition: '📊 Condição geral',
   }[type] || type)
 
@@ -176,6 +138,92 @@ export default function InspectionAnalysis() {
     btnGreen: { padding: '13px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 2px 16px rgba(46,204,138,0.35)' } as React.CSSProperties,
     btnOutline: { padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 500, background: 'transparent', color: 'var(--navy)', border: '1.5px solid var(--border)', cursor: 'pointer' } as React.CSSProperties,
   }
+
+  const AnalysisCard = ({ name, status, result }: { name: string; status: string; result?: AnalysisResult }) => (
+    <div style={s.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: result ? '16px' : '0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ fontSize: '22px' }}>
+            {status === 'pending' && '⏳'}
+            {status === 'analyzing' && '🔄'}
+            {status === 'done' && '✅'}
+            {status === 'error' && '❌'}
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>{name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+              {status === 'pending' && 'Aguardando...'}
+              {status === 'analyzing' && 'Analisando com IA...'}
+              {status === 'done' && 'Análise concluída'}
+              {status === 'error' && 'Erro na análise'}
+            </div>
+          </div>
+        </div>
+        {result && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: result.score >= 75 ? '#155724' : result.score >= 50 ? '#856404' : '#C0392B' }}>
+              {result.score}%
+            </span>
+            <span style={{ padding: '4px 10px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, ...getConditionColor(result.condition) }}>
+              {getConditionColor(result.condition).label}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {status === 'analyzing' && (
+        <div style={{ height: '4px', background: 'var(--cream)', borderRadius: '2px', overflow: 'hidden', marginTop: '12px' }}>
+          <div style={{ height: '100%', background: 'var(--green)', borderRadius: '2px', width: '60%', animation: 'pulse 1.5s ease infinite' }} />
+        </div>
+      )}
+
+      {result && (
+        <>
+          <p style={{ fontSize: '14px', color: 'var(--muted)', fontStyle: 'italic', marginBottom: '16px', lineHeight: 1.6 }}>
+            {result.summary}
+          </p>
+
+          {/* Findings */}
+          {result.findings.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#C0392B', marginBottom: '8px' }}>
+                ⚠️ Ocorrências encontradas
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {result.findings.map((f, fi) => (
+                  <div key={fi} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 14px', borderRadius: '8px', background: '#FFF8F8', border: `1px solid ${getSeverityColor(f.severity)}33` }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getSeverityColor(f.severity), flexShrink: 0, marginTop: '5px' }} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '2px' }}>{getTypeLabel(f.type)}</div>
+                      <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{f.description}</div>
+                      {f.location && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>📍 {f.location}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Conformities */}
+          {result.conformities && result.conformities.length > 0 && (
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#155724', marginBottom: '8px' }}>
+                ✅ Itens em conformidade
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {result.conformities.map((c, ci) => (
+                  <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', background: '#F0FFF4', border: '1px solid #C3E6CB', fontSize: '13px', color: '#155724' }}>
+                    <span style={{ fontSize: '12px' }}>✓</span>
+                    {c}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
 
   if (loading) return (
     <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -205,9 +253,13 @@ export default function InspectionAnalysis() {
           </p>
         </div>
 
-        {/* Score geral quando done */}
+        {/* Score geral */}
         {done && (
-          <div style={{ background: overallScore >= 75 ? '#D4EDDA' : overallScore >= 50 ? '#FFF3CD' : '#FDECEA', borderRadius: '20px', padding: '32px', marginBottom: '24px', textAlign: 'center', border: `1px solid ${overallScore >= 75 ? '#C3E6CB' : overallScore >= 50 ? '#FFEEBA' : '#F5C6CB'}` }}>
+          <div style={{
+            background: overallScore >= 75 ? '#D4EDDA' : overallScore >= 50 ? '#FFF3CD' : '#FDECEA',
+            borderRadius: '20px', padding: '32px', marginBottom: '24px', textAlign: 'center',
+            border: `1px solid ${overallScore >= 75 ? '#C3E6CB' : overallScore >= 50 ? '#FFEEBA' : '#F5C6CB'}`
+          }}>
             <div style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: overallScore >= 75 ? '#155724' : overallScore >= 50 ? '#856404' : '#C0392B', marginBottom: '8px' }}>
               Condição Geral do Imóvel
             </div>
@@ -228,7 +280,7 @@ export default function InspectionAnalysis() {
               Pronto para analisar
             </h2>
             <p style={{ fontSize: '15px', color: 'var(--muted)', marginBottom: '8px' }}>
-              A IA irá comparar as fotos de saída com as fotos originais de cada cômodo e objeto.
+              A IA irá comparar as fotos de saída com as fotos originais, identificando itens faltantes, danos e conformidades.
             </p>
             <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '32px' }}>
               {roomAnalyses.length} cômodo(s) e {itemAnalyses.length} objeto(s) serão analisados
@@ -239,144 +291,31 @@ export default function InspectionAnalysis() {
           </div>
         )}
 
-        {/* Analysis progress */}
+        {/* Analysis results */}
         {(analyzing || done) && (
           <>
-            {/* Rooms */}
             {roomAnalyses.length > 0 && (
               <>
                 <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>
                   🏠 Cômodos
                 </h2>
-                {roomAnalyses.map((ra, i) => (
-                  <div key={ra.room.id} style={s.card}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ra.result ? '16px' : '0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '22px' }}>
-                          {ra.status === 'pending' && '⏳'}
-                          {ra.status === 'analyzing' && '🔄'}
-                          {ra.status === 'done' && '✅'}
-                          {ra.status === 'error' && '❌'}
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>{ra.room.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                            {ra.status === 'pending' && 'Aguardando...'}
-                            {ra.status === 'analyzing' && 'Analisando com IA...'}
-                            {ra.status === 'done' && 'Análise concluída'}
-                            {ra.status === 'error' && 'Erro na análise'}
-                          </div>
-                        </div>
-                      </div>
-                      {ra.result && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: ra.result.score >= 75 ? '#155724' : ra.result.score >= 50 ? '#856404' : '#C0392B' }}>
-                            {ra.result.score}%
-                          </span>
-                          <span style={{ padding: '4px 10px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, ...getConditionColor(ra.result.condition) }}>
-                            {getConditionColor(ra.result.condition).label}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Analyzing spinner */}
-                    {ra.status === 'analyzing' && (
-                      <div style={{ height: '4px', background: 'var(--cream)', borderRadius: '2px', overflow: 'hidden', marginTop: '12px' }}>
-                        <div style={{ height: '100%', background: 'var(--green)', borderRadius: '2px', width: '60%', animation: 'pulse 1.5s ease infinite' }} />
-                      </div>
-                    )}
-
-                    {/* Results */}
-                    {ra.result && (
-                      <>
-                        <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: ra.result.findings.length > 0 ? '16px' : '0', fontStyle: 'italic' }}>
-                          {ra.result.summary}
-                        </p>
-                        {ra.result.findings.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {ra.result.findings.map((f, fi) => (
-                              <div key={fi} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 14px', borderRadius: '8px', background: 'var(--cream)', border: `1px solid ${getSeverityColor(f.severity)}22` }}>
-                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getSeverityColor(f.severity), flexShrink: 0, marginTop: '5px' }} />
-                                <div>
-                                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>{getTypeLabel(f.type)}</div>
-                                  <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{f.description}</div>
-                                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>📍 {f.location}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                {roomAnalyses.map(ra => (
+                  <AnalysisCard key={ra.room.id} name={ra.room.name} status={ra.status} result={ra.result} />
                 ))}
               </>
             )}
 
-            {/* Items */}
             {itemAnalyses.length > 0 && (
               <>
                 <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', margin: '24px 0 16px' }}>
                   📦 Objetos
                 </h2>
-                {itemAnalyses.map((ia, i) => (
-                  <div key={ia.item.id} style={s.card}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '22px' }}>
-                          {ia.status === 'pending' && '⏳'}
-                          {ia.status === 'analyzing' && '🔄'}
-                          {ia.status === 'done' && '✅'}
-                          {ia.status === 'error' && '❌'}
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>{ia.item.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                            {ia.status === 'pending' && 'Aguardando...'}
-                            {ia.status === 'analyzing' && 'Analisando com IA...'}
-                            {ia.status === 'done' && 'Análise concluída'}
-                            {ia.status === 'error' && 'Erro na análise'}
-                          </div>
-                        </div>
-                      </div>
-                      {ia.result && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: ia.result.score >= 75 ? '#155724' : ia.result.score >= 50 ? '#856404' : '#C0392B' }}>
-                            {ia.result.score}%
-                          </span>
-                          <span style={{ padding: '4px 10px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, ...getConditionColor(ia.result.condition) }}>
-                            {getConditionColor(ia.result.condition).label}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {ia.status === 'analyzing' && (
-                      <div style={{ height: '4px', background: 'var(--cream)', borderRadius: '2px', overflow: 'hidden', marginTop: '12px' }}>
-                        <div style={{ height: '100%', background: 'var(--green)', borderRadius: '2px', width: '60%', animation: 'pulse 1.5s ease infinite' }} />
-                      </div>
-                    )}
-
-                    {ia.result && ia.result.findings.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                        {ia.result.findings.map((f, fi) => (
-                          <div key={fi} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 14px', borderRadius: '8px', background: 'var(--cream)' }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getSeverityColor(f.severity), flexShrink: 0, marginTop: '5px' }} />
-                            <div>
-                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>{getTypeLabel(f.type)}</div>
-                              <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{f.description}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {itemAnalyses.map(ia => (
+                  <AnalysisCard key={ia.item.id} name={ia.item.name} status={ia.status} result={ia.result} />
                 ))}
               </>
             )}
 
-            {/* Done actions */}
             {done && (
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '32px' }}>
                 <button style={s.btnOutline} onClick={() => navigate('/dashboard')}>
