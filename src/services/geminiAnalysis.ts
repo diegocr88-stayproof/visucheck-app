@@ -2,20 +2,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY)
 
-export type AnalysisResult = {
-  condition: 'good' | 'warning' | 'critical'
-  score: number
-  findings: Finding[]
-  summary: string
-}
-
-export type Finding = {
-  type: 'missing_item' | 'physical_damage' | 'stain' | 'general_condition'
-  severity: 'low' | 'medium' | 'high'
-  description: string
-  location: string
-}
-
 async function imageUrlToBase64(url: string): Promise<string> {
   const response = await fetch(url)
   const blob = await response.blob()
@@ -28,6 +14,18 @@ async function imageUrlToBase64(url: string): Promise<string> {
     reader.onerror = reject
     reader.readAsDataURL(blob)
   })
+}
+
+export type AnalysisResult = {
+  condition: 'good' | 'warning' | 'critical'
+  score: number
+  findings: {
+    type: string
+    severity: string
+    description: string
+    location: string
+  }[]
+  summary: string
 }
 
 export async function analyzeRoomPhotos(
@@ -49,47 +47,52 @@ export async function analyzeRoomPhotos(
     }))
   )
 
-  const prompt = `Você é um perito em vistoria de imóveis de aluguel por temporada. Sua análise deve ser RIGOROSA e DETALHADA.
+  const prompt = `Você é um perito forense em vistoria de imóveis de aluguel por temporada.
 
 Analise as fotos do cômodo "${roomName}":
-- As primeiras ${matrixPhotos.length} foto(s) são o ESTADO ORIGINAL (foto matriz) — referência
-- As últimas ${exitPhotos.length} foto(s) são o ESTADO ATUAL após uso pelo inquilino
+- As primeiras ${matrixPhotos.length} foto(s) são o ESTADO ORIGINAL (referência)
+- As últimas ${exitPhotos.length} foto(s) são o ESTADO ATUAL após uso
 
-ANALISE MINUCIOSAMENTE e identifique QUALQUER diferença, por menor que seja:
+Faça uma VARREDURA COMPLETA do ambiente. Compare TUDO que aparece nas fotos:
 
-1. ITENS FALTANTES: Móveis, objetos, acessórios, quadros, plantas, almofadas, tapetes — qualquer item presente na foto original que não apareça na foto atual
-2. DANOS FÍSICOS: Riscos, arranhões, quebrados, amassados, furos, lascas, trincas em paredes, pisos, móveis ou janelas
-3. MANCHAS E SUJEIRA: Manchas nas paredes, teto, piso, móveis — qualquer sujeira visível
-4. ALTERAÇÕES: Móveis movidos, itens trocados de lugar, persianas/cortinas danificadas
-5. DESGASTE EXCESSIVO: Desgaste além do normal para o período de uso
+INVENTÁRIO VISUAL: Liste mentalmente todos os objetos visíveis na foto original:
+móveis, decorações, quadros, plantas, tapetes, almofadas, luminárias, cortinas,
+bibelôs, livros, vasos, porta-retratos, espelhos, eletrodomésticos, utensílios,
+acessórios de parede, prateleiras e seus conteúdos, etc.
 
-SEJA CRÍTICO: Se houver qualquer dúvida sobre um item, registre como ocorrência.
-Se um objeto estava na foto original e não aparece claramente na foto atual, registre como ITEM FALTANTE.
+Depois compare com o estado atual e identifique:
+1. Qualquer objeto que estava na foto original e NÃO está na foto atual = ITEM FALTANTE
+2. Danos visíveis em móveis, paredes, piso, teto, janelas
+3. Manchas, sujeira ou marcas novas
+4. Alterações de posição ou substituições suspeitas
 
-Responda APENAS em JSON válido, sem markdown, sem explicações:
+SEJA EXTREMAMENTE DETALHISTA. Objetos pequenos de decoração também contam.
+Se um item estava visível na foto original e não aparece na foto atual, registre.
+
+Responda APENAS em JSON válido, sem markdown:
 {
   "score": 85,
   "condition": "good",
-  "summary": "Resumo detalhado do estado geral do cômodo comparado ao original.",
+  "summary": "Resumo completo do inventário visual comparado. Liste o que estava presente, o que foi mantido e o que foi alterado.",
   "findings": [
     {
       "type": "missing_item",
-      "severity": "high",
-      "description": "Descrição específica do que foi encontrado",
-      "location": "Localização exata no cômodo"
+      "severity": "medium",
+      "description": "Descrição específica do objeto que estava e não está mais",
+      "location": "Onde estava localizado na foto original"
     }
   ]
 }
 
-Regras:
-- score: 0-100 (100 = idêntico ao original, 0 = completamente diferente/destruído)
-- Desconte 5-10 pontos por item faltante, 3-8 por dano físico, 2-5 por mancha
-- condition: "good" (score >= 75), "warning" (score 50-74), "critical" (score < 50)
-- type: "missing_item", "physical_damage", "stain" ou "general_condition"
-- severity: "low" (cosmético), "medium" (visível mas reparável), "high" (sério/custoso)
-- Se não houver problemas reais, retorne findings como array vazio []
+Regras de pontuação:
+- 100 = ambiente idêntico ao original
+- Desconte 8-15 por item faltante (dependendo do valor aparente)
+- Desconte 3-8 por dano físico
+- Desconte 2-5 por mancha ou sujeira
+- condition: "good" (>=75), "warning" (50-74), "critical" (<50)
+- severity: "low" (pequena decoração), "medium" (item de valor moderado), "high" (item de valor alto ou dano sério)
 - Escreva TUDO em português brasileiro
-- Seja específico nas descrições — evite termos genéricos`
+- Se o ambiente estiver idêntico, diga isso claramente no summary`
 
   try {
     const result = await model.generateContent([prompt, ...matrixParts, ...exitParts])
@@ -126,7 +129,7 @@ export async function analyzeItemPhotos(
     }))
   )
 
-  const prompt = `Você é um perito em vistoria de imóveis de aluguel por temporada. Análise RIGOROSA e DETALHADA.
+  const prompt = `Você é um perito forense em vistoria de imóveis de aluguel por temporada. Análise RIGOROSA.
 
 Analise o objeto "${itemName}":
 - As primeiras ${matrixPhotos.length} foto(s) são o ESTADO ORIGINAL
@@ -136,6 +139,7 @@ VERIFIQUE MINUCIOSAMENTE:
 1. O objeto está PRESENTE? Se não aparecer nas fotos atuais = ITEM FALTANTE (severity: high)
 2. Há riscos, arranhões, quebrados, manchas, deformações?
 3. O estado atual é significativamente pior que o original?
+4. Algum acessório ou parte do objeto está faltando?
 
 Responda APENAS em JSON válido, sem markdown:
 {
