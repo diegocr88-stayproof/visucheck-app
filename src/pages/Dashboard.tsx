@@ -61,17 +61,17 @@ export default function Dashboard() {
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { error } = await supabase.from('inspections').insert({
+    const { data, error } = await supabase.from('inspections').insert({
       property_id: selectedPropertyId,
       type: inspType,
       status: 'pending',
       user_id: user.id,
-    })
+    }).select().single()
     setSaving(false)
-    if (!error) {
+    if (!error && data) {
       setSelectedPropertyId(''); setInspType('entry')
       setModal('none')
-      fetchAll()
+      navigate(`/inspection/${data.id}/upload`)
     }
   }
 
@@ -97,7 +97,6 @@ export default function Dashboard() {
     h1: { fontFamily: 'Syne, sans-serif', fontSize: '36px', fontWeight: 800, color: 'var(--navy)', letterSpacing: '-1px', marginBottom: '6px' } as React.CSSProperties,
     sub: { fontSize: '15px', color: 'var(--muted)' } as React.CSSProperties,
     btnGreen: { display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '11px 22px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 2px 12px rgba(46,204,138,0.3)' } as React.CSSProperties,
-    btnNavy: { display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '11px 22px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, background: 'var(--navy)', color: 'white', border: 'none', cursor: 'pointer' } as React.CSSProperties,
     btnOutline: { padding: '9px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'transparent', color: 'var(--navy)', border: '1.5px solid var(--border)', cursor: 'pointer' } as React.CSSProperties,
     card: { background: 'white', borderRadius: '16px', border: '1px solid var(--border)', padding: '24px', transition: 'box-shadow 0.2s' } as React.CSSProperties,
     emptyBox: { background: 'white', borderRadius: '20px', border: '1.5px dashed var(--border)', padding: '80px 40px', textAlign: 'center' as const },
@@ -234,6 +233,7 @@ export default function Dashboard() {
                         <div key={insp.id} style={{ ...s.card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', cursor: 'pointer' }}
                           onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 32px rgba(11,45,82,0.12)')}
                           onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                          onClick={() => navigate(`/inspection/${insp.id}/upload`)}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                             <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
@@ -253,7 +253,7 @@ export default function Dashboard() {
                               {getStatusLabel(insp.status)}
                             </span>
                             {insp.report_url && (
-                              <button style={s.btnOutline} onClick={() => window.open(insp.report_url!)}>
+                              <button style={s.btnOutline} onClick={e => { e.stopPropagation(); window.open(insp.report_url!) }}>
                                 Ver relatório
                               </button>
                             )}

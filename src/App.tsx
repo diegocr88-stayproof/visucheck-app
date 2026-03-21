@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Welcome from './pages/Welcome'
 import PropertySetup from './pages/PropertySetup'
+import InspectionUpload from './pages/InspectionUpload'
 import PrivateRoute from './components/PrivateRoute'
 
 export default function App() {
@@ -24,6 +25,11 @@ export default function App() {
       <Route path="/property/:propertyId/setup" element={
         <PrivateRoute>
           <PropertySetup />
+        </PrivateRoute>
+      } />
+      <Route path="/inspection/:inspectionId/upload" element={
+        <PrivateRoute>
+          <InspectionUpload />
         </PrivateRoute>
       } />
     </Routes>
