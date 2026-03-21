@@ -407,20 +407,74 @@ export default function PropertySetup() {
                     <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{currentRoom.name}</h2>
                     <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '24px' }}>Tire 4 fotos — uma em cada posição do cômodo</p>
 
-                    {/* Guide visual */}
-                    <div style={{ background: 'var(--cream)', borderRadius: '12px', padding: '20px', marginBottom: '24px', position: 'relative', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ width: '60px', height: '60px', background: 'white', borderRadius: '8px', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>🏠</div>
-                      {[
-                        { label: 'N', style: { top: '8px', left: '50%', transform: 'translateX(-50%)' } },
-                        { label: 'S', style: { bottom: '8px', left: '50%', transform: 'translateX(-50%)' } },
-                        { label: 'L', style: { top: '50%', right: '16px', transform: 'translateY(-50%)' } },
-                        { label: 'O', style: { top: '50%', left: '16px', transform: 'translateY(-50%)' } },
-                      ].map(dir => (
-                        <div key={dir.label} style={{ position: 'absolute', ...dir.style, width: '28px', height: '28px', borderRadius: '50%', background: 'var(--navy)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700 }}>
-                          {dir.label}
-                        </div>
-                      ))}
-                    </div>
+                    {/* Guide visual — planta baixa */}
+<div style={{ background: 'var(--cream)', borderRadius: '14px', padding: '24px', marginBottom: '24px' }}>
+  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '16px', textAlign: 'center' }}>
+    Guia de posicionamento das fotos
+  </div>
+  <div style={{ position: 'relative', width: '100%', maxWidth: '360px', margin: '0 auto', aspectRatio: '1' }}>
+
+    {/* Room floor plan */}
+    <div style={{ position: 'absolute', inset: '48px', background: 'white', borderRadius: '4px', border: '2.5px solid var(--navy)', opacity: 0.9 }}>
+      {/* Door */}
+      <div style={{ position: 'absolute', bottom: '-2.5px', left: '30%', width: '20%', height: '3px', background: 'var(--cream)' }} />
+      <div style={{ position: 'absolute', bottom: '0', left: '30%', width: '20%', height: '14px', borderRight: '2px solid var(--navy)', borderRadius: '0 0 12px 0', borderBottom: 'none', background: 'transparent' }} />
+      {/* Floor label */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '28px', marginBottom: '4px' }}>🛋️</div>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)' }}>{currentRoom.name}</div>
+        </div>
+      </div>
+      {/* Wall labels */}
+      <div style={{ position: 'absolute', top: '6px', left: '50%', transform: 'translateX(-50%)', fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>PAREDE NORTE</div>
+      <div style={{ position: 'absolute', bottom: '6px', left: '50%', transform: 'translateX(-50%)', fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>PAREDE SUL</div>
+      <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%) rotate(-90deg)', fontSize: '10px', fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>PAREDE OESTE</div>
+      <div style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%) rotate(90deg)', fontSize: '10px', fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>PAREDE LESTE</div>
+    </div>
+
+    {/* Camera icons at each position */}
+    {[
+      { pos: 'north', label: 'Foto 1', top: '0px', left: '50%', transform: 'translateX(-50%)', arrow: '↓' },
+      { pos: 'south', label: 'Foto 2', bottom: '0px', left: '50%', transform: 'translateX(-50%)', arrow: '↑' },
+      { pos: 'west',  label: 'Foto 3', top: '50%', left: '0px',  transform: 'translateY(-50%)', arrow: '→' },
+      { pos: 'east',  label: 'Foto 4', top: '50%', right: '0px', transform: 'translateY(-50%)', arrow: '←' },
+    ].map(cam => {
+      const slot = (roomPhotos[currentRoom.id] || []).find(s => s.position === cam.pos)
+      const hasPhoto = !!slot?.file
+      return (
+        <div key={cam.pos} style={{
+          position: 'absolute', top: cam.top, bottom: (cam as any).bottom,
+          left: cam.left, right: (cam as any).right, transform: cam.transform,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+          cursor: 'pointer',
+        }} onClick={() => openFilePicker('room', currentRoom.id, cam.pos)}>
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '12px',
+            background: hasPhoto ? 'var(--green)' : 'var(--navy)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '20px', boxShadow: '0 4px 12px rgba(11,45,82,0.25)',
+            border: hasPhoto ? '2px solid var(--green-dark)' : '2px solid transparent',
+            transition: 'all 0.2s',
+          }}>
+            {hasPhoto ? '✅' : '📷'}
+          </div>
+          <div style={{
+            fontSize: '10px', fontWeight: 700,
+            color: hasPhoto ? 'var(--green-dark)' : 'var(--navy)',
+            background: 'white', padding: '2px 6px', borderRadius: '4px',
+            border: '1px solid var(--border)',
+          }}>{cam.label}</div>
+          <div style={{ fontSize: '14px', color: 'var(--muted)' }}>{cam.arrow}</div>
+        </div>
+      )
+    })}
+  </div>
+
+  <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--muted)', marginTop: '16px' }}>
+    Clique em cada 📷 para tirar a foto daquela posição
+  </p>
+</div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                       {(roomPhotos[currentRoom.id] || []).map(slot => (
