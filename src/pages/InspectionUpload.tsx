@@ -5,13 +5,13 @@ import Navbar from '../components/Navbar'
 
 type Room = { id: string; name: string; is_custom: boolean }
 type Item = { id: string; name: string }
-type PhotoSlot = { position: string; label: string; guide: string; file?: File; preview?: string; uploading?: boolean; uploaded?: boolean; url?: string }
+type PhotoSlot = { position: string; label: string; guide: string; file?: File; preview?: string }
 
-const POSITIONS: Omit<PhotoSlot, 'file' | 'preview' | 'uploading' | 'uploaded' | 'url'>[] = [
-  { position: 'north', label: 'Parede Norte', guide: 'Foto da parede de frente ao entrar' },
-  { position: 'south', label: 'Parede Sul', guide: 'Foto da parede dos fundos' },
-  { position: 'east', label: 'Parede Leste', guide: 'Foto da parede à direita' },
-  { position: 'west', label: 'Parede Oeste', guide: 'Foto da parede à esquerda' },
+const POSITIONS = [
+  { position: 'north', label: 'Canto 1', guide: 'Frente esquerda do cômodo' },
+  { position: 'east', label: 'Canto 2', guide: 'Frente direita do cômodo' },
+  { position: 'west', label: 'Canto 3', guide: 'Fundo esquerda do cômodo' },
+  { position: 'south', label: 'Canto 4', guide: 'Fundo direita do cômodo' },
 ]
 
 export default function InspectionUpload() {
@@ -39,30 +39,18 @@ export default function InspectionUpload() {
     const { data: insp } = await supabase.from('inspections').select('*').eq('id', inspectionId).single()
     if (!insp) return
     setInspection(insp)
-
     const { data: prop } = await supabase.from('properties').select('*').eq('id', insp.property_id).single()
     setProperty(prop)
-
     const { data: roomsData } = await supabase.from('rooms').select('*').eq('property_id', insp.property_id)
     const { data: itemsData } = await supabase.from('items').select('*').eq('property_id', insp.property_id)
-
     setRooms(roomsData || [])
     setItems(itemsData || [])
-
-    // Inicializa slots de fotos para cada cômodo
     const rPhotos: Record<string, PhotoSlot[]> = {}
-    ;(roomsData || []).forEach(room => {
-      rPhotos[room.id] = POSITIONS.map(p => ({ ...p }))
-    })
+    ;(roomsData || []).forEach(room => { rPhotos[room.id] = POSITIONS.map(p => ({ ...p })) })
     setRoomPhotos(rPhotos)
-
-    // Inicializa slots de fotos para cada objeto (1 slot inicial)
     const iPhotos: Record<string, PhotoSlot[]> = {}
-    ;(itemsData || []).forEach(item => {
-      iPhotos[item.id] = [{ position: '1', label: 'Foto 1', guide: 'Foto do objeto' }]
-    })
+    ;(itemsData || []).forEach(item => { iPhotos[item.id] = [{ position: '1', label: 'Foto 1', guide: 'Foto do objeto' }] })
     setItemPhotos(iPhotos)
-
     setLoading(false)
   }
 
@@ -70,21 +58,10 @@ export default function InspectionUpload() {
     const file = e.target.files?.[0]
     if (!file || !activeSlot) return
     const preview = URL.createObjectURL(file)
-
     if (activeSlot.type === 'room') {
-      setRoomPhotos(prev => ({
-        ...prev,
-        [activeSlot.id]: prev[activeSlot.id].map(slot =>
-          slot.position === activeSlot.position ? { ...slot, file, preview } : slot
-        )
-      }))
+      setRoomPhotos(prev => ({ ...prev, [activeSlot.id]: prev[activeSlot.id].map(slot => slot.position === activeSlot.position ? { ...slot, file, preview } : slot) }))
     } else {
-      setItemPhotos(prev => ({
-        ...prev,
-        [activeSlot.id]: prev[activeSlot.id].map(slot =>
-          slot.position === activeSlot.position ? { ...slot, file, preview } : slot
-        )
-      }))
+      setItemPhotos(prev => ({ ...prev, [activeSlot.id]: prev[activeSlot.id].map(slot => slot.position === activeSlot.position ? { ...slot, file, preview } : slot) }))
     }
     e.target.value = ''
   }
@@ -98,64 +75,47 @@ export default function InspectionUpload() {
     setItemPhotos(prev => {
       const current = prev[itemId] || []
       const nextNum = current.length + 1
-      return {
-        ...prev,
-        [itemId]: [...current, { position: String(nextNum), label: `Foto ${nextNum}`, guide: 'Foto adicional do objeto' }]
-      }
+      return { ...prev, [itemId]: [...current, { position: String(nextNum), label: `Foto ${nextNum}`, guide: 'Foto adicional do objeto' }] }
     })
   }
 
   function removeItemPhoto(itemId: string, position: string) {
-    setItemPhotos(prev => ({
-      ...prev,
-      [itemId]: prev[itemId].filter(s => s.position !== position)
-    }))
+    setItemPhotos(prev => ({ ...prev, [itemId]: prev[itemId].filter(s => s.position !== position) }))
   }
 
   async function uploadAllAndFinish() {
     if (!inspectionId) return
     setFinishing(true)
-
     const uploads: Promise<any>[] = []
 
-    // Upload fotos de cômodos
     for (const room of rooms) {
       const slots = roomPhotos[room.id] || []
       for (const slot of slots) {
         if (!slot.file) continue
         const path = `${inspectionId}/rooms/${room.id}/${slot.position}-${Date.now()}.jpg`
         uploads.push(
-          supabase.storage.from('inspection-photos').upload(path, slot.file).then(async ({ data }) => {
-            if (!data) return
+          supabase.storage.from('inspection-photos').upload(path, slot.file).then(async () => {
             const { data: urlData } = supabase.storage.from('inspection-photos').getPublicUrl(path)
             await supabase.from('inspection_photos').insert({
-              inspection_id: inspectionId,
-              room_id: room.id,
-              position: slot.position,
-              photo_url: urlData.publicUrl,
-              storage_path: path,
+              inspection_id: inspectionId, room_id: room.id,
+              position: slot.position, photo_url: urlData.publicUrl, storage_path: path,
             })
           })
         )
       }
     }
 
-    // Upload fotos de objetos
     for (const item of items) {
       const slots = itemPhotos[item.id] || []
       for (const slot of slots) {
         if (!slot.file) continue
         const path = `${inspectionId}/items/${item.id}/${slot.position}-${Date.now()}.jpg`
         uploads.push(
-          supabase.storage.from('inspection-photos').upload(path, slot.file).then(async ({ data }) => {
-            if (!data) return
+          supabase.storage.from('inspection-photos').upload(path, slot.file).then(async () => {
             const { data: urlData } = supabase.storage.from('inspection-photos').getPublicUrl(path)
             await supabase.from('inspection_photos').insert({
-              inspection_id: inspectionId,
-              item_id: item.id,
-              position: slot.position,
-              photo_url: urlData.publicUrl,
-              storage_path: path,
+              inspection_id: inspectionId, item_id: item.id,
+              position: slot.position, photo_url: urlData.publicUrl, storage_path: path,
             })
           })
         )
@@ -163,12 +123,8 @@ export default function InspectionUpload() {
     }
 
     await Promise.all(uploads)
-
-    // Atualiza status da vistoria
-    await supabase.from('inspections').update({ status: 'completed' }).eq('id', inspectionId)
-
+    await supabase.from('inspections').update({ status: 'processing' }).eq('id', inspectionId)
     setFinishing(false)
-    navigate('/dashboard')
   }
 
   const currentRoom = rooms[currentRoomIndex]
@@ -197,8 +153,7 @@ export default function InspectionUpload() {
   return (
     <div style={s.page}>
       <Navbar />
-      <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
-        style={{ display: 'none' }} onChange={handleFileSelect} />
+      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileSelect} />
 
       <div style={s.inner}>
         {/* Header */}
@@ -207,23 +162,21 @@ export default function InspectionUpload() {
             ← Voltar ao Dashboard
           </button>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '28px', fontWeight: 800, color: 'var(--navy)', letterSpacing: '-1px', marginBottom: '4px' }}>
-            Vistoria de {inspection?.type === 'entry' ? 'Entrada' : 'Saída'}
+            Vistoria de Saída
           </h1>
           <p style={{ fontSize: '15px', color: 'var(--muted)' }}>
             {property?.name} • {new Date(inspection?.created_at).toLocaleDateString('pt-BR')}
           </p>
         </div>
 
-        {/* Progress bar */}
-        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid var(--border)', padding: '16px 24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>Progresso</span>
-              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>{roomsDone}/{totalRooms} cômodos fotografados</span>
-            </div>
-            <div style={{ height: '6px', background: 'var(--cream)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: 'var(--green)', borderRadius: '3px', width: `${totalRooms > 0 ? (roomsDone / totalRooms) * 100 : 0}%`, transition: 'width 0.3s' }} />
-            </div>
+        {/* Progress */}
+        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid var(--border)', padding: '16px 24px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>Progresso</span>
+            <span style={{ fontSize: '13px', color: 'var(--muted)' }}>{roomsDone}/{totalRooms} cômodos fotografados</span>
+          </div>
+          <div style={{ height: '6px', background: 'var(--cream)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: 'var(--green)', borderRadius: '3px', width: `${totalRooms > 0 ? (roomsDone / totalRooms) * 100 : 0}%`, transition: 'width 0.3s' }} />
           </div>
         </div>
 
@@ -242,10 +195,9 @@ export default function InspectionUpload() {
           ))}
         </div>
 
-        {/* ROOMS SECTION */}
+        {/* ROOMS */}
         {currentSection === 'rooms' && rooms.length > 0 && (
           <>
-            {/* Room navigation */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
               {rooms.map((room, i) => {
                 const hasPhotos = roomPhotos[room.id]?.some(s => s.file)
@@ -264,72 +216,69 @@ export default function InspectionUpload() {
               })}
             </div>
 
-            {/* Current room photos */}
             {currentRoom && (
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '8px' }}>
-                  {currentRoom.name}
-                </h2>
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '24px' }}>
-                  Tire 4 fotos — uma em cada posição do cômodo
-                </p>
+                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{currentRoom.name}</h2>
+                <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '24px' }}>Tire 4 fotos — uma em cada canto do cômodo</p>
 
-                {/* Photo guide visual */}
-                <div style={{ background: 'var(--cream)', borderRadius: '12px', padding: '20px', marginBottom: '24px', position: 'relative', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: '60px', height: '60px', background: 'white', borderRadius: '8px', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>🏠</div>
-                  {[
-                    { label: 'N', top: '8px', left: '50%', transform: 'translateX(-50%)' },
-                    { label: 'S', bottom: '8px', left: '50%', transform: 'translateX(-50%)' },
-                    { label: 'L', top: '50%', right: '16px', transform: 'translateY(-50%)' },
-                    { label: 'O', top: '50%', left: '16px', transform: 'translateY(-50%)' },
-                  ].map(dir => (
-                    <div key={dir.label} style={{
-                      position: 'absolute', ...dir as any,
-                      width: '28px', height: '28px', borderRadius: '50%',
-                      background: 'var(--navy)', color: 'white',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '12px', fontWeight: 700,
-                    }}>{dir.label}</div>
-                  ))}
+                {/* Guide visual */}
+                <div style={{ background: 'var(--cream)', borderRadius: '14px', padding: '24px', marginBottom: '24px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '16px', textAlign: 'center' }}>
+                    Guia de posicionamento
+                  </div>
+                  <div style={{ position: 'relative', width: '100%', maxWidth: '280px', margin: '0 auto', aspectRatio: '1' }}>
+                    <div style={{ position: 'absolute', inset: '52px', background: 'white', border: '2.5px solid var(--navy)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ position: 'absolute', bottom: '-2.5px', left: '35%', width: '18%', height: '3px', background: 'var(--cream)' }} />
+                      <div style={{ position: 'absolute', bottom: 0, left: '35%', width: '18%', height: '12px', borderRight: '2px solid var(--navy)', borderRadius: '0 0 10px 0', background: 'transparent' }} />
+                      <div style={{ fontSize: '22px' }}>🛋️</div>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--muted)' }}>{currentRoom.name}</div>
+                      <div style={{ position: 'absolute', top: '8px', left: '8px', fontSize: '12px', color: 'var(--muted)' }}>↘</div>
+                      <div style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '12px', color: 'var(--muted)' }}>↙</div>
+                      <div style={{ position: 'absolute', bottom: '8px', left: '8px', fontSize: '12px', color: 'var(--muted)' }}>↗</div>
+                      <div style={{ position: 'absolute', bottom: '8px', right: '8px', fontSize: '12px', color: 'var(--muted)' }}>↖</div>
+                    </div>
+                    {[
+                      { pos: 'north', label: 'Canto 1', style: { top: '0px', left: '0px' }, dir: 'Frente esq.' },
+                      { pos: 'east', label: 'Canto 2', style: { top: '0px', right: '0px' }, dir: 'Frente dir.' },
+                      { pos: 'west', label: 'Canto 3', style: { bottom: '0px', left: '0px' }, dir: 'Fundo esq.' },
+                      { pos: 'south', label: 'Canto 4', style: { bottom: '0px', right: '0px' }, dir: 'Fundo dir.' },
+                    ].map(cam => {
+                      const slot = (roomPhotos[currentRoom.id] || []).find(s => s.position === cam.pos)
+                      const hasPhoto = !!slot?.file
+                      return (
+                        <div key={cam.pos} style={{ position: 'absolute', ...cam.style, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}
+                          onClick={() => openFilePicker('room', currentRoom.id, cam.pos)}>
+                          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: hasPhoto ? 'var(--green)' : 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', boxShadow: '0 4px 12px rgba(11,45,82,0.25)', transition: 'all 0.2s' }}>
+                            {hasPhoto ? '✅' : '📷'}
+                          </div>
+                          <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--navy)', background: 'white', padding: '1px 5px', borderRadius: '4px', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{cam.label}</div>
+                          <div style={{ fontSize: '8px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{cam.dir}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--muted)', marginTop: '16px' }}>
+                    📷 Clique em cada câmera para tirar a foto
+                  </p>
                 </div>
 
                 {/* 4 photo slots */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                   {(roomPhotos[currentRoom.id] || []).map(slot => (
                     <div key={slot.position}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '6px' }}>
-                        {slot.label}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>
-                        {slot.guide}
-                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '4px' }}>{slot.label}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>{slot.guide}</div>
                       {slot.preview ? (
                         <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '4/3' }}>
                           <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button
-                            onClick={() => openFilePicker('room', currentRoom.id, slot.position)}
-                            style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(11,45,82,0.8)', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}>
+                          <button onClick={() => openFilePicker('room', currentRoom.id, slot.position)} style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(11,45,82,0.8)', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}>
                             🔄 Trocar
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => openFilePicker('room', currentRoom.id, slot.position)}
-                          style={{
-                            width: '100%', aspectRatio: '4/3', borderRadius: '12px',
-                            border: '2px dashed var(--border)', background: 'var(--cream)',
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            gap: '8px', cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = 'var(--navy)'
-                            e.currentTarget.style.background = 'rgba(11,45,82,0.03)'
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = 'var(--border)'
-                            e.currentTarget.style.background = 'var(--cream)'
-                          }}
-                        >
+                        <button onClick={() => openFilePicker('room', currentRoom.id, slot.position)} style={{ width: '100%', aspectRatio: '4/3', borderRadius: '12px', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--navy)'; e.currentTarget.style.background = 'rgba(11,45,82,0.03)' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--cream)' }}>
                           <span style={{ fontSize: '28px' }}>📸</span>
                           <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Tirar / Enviar foto</span>
                         </button>
@@ -338,23 +287,12 @@ export default function InspectionUpload() {
                   ))}
                 </div>
 
-                {/* Room navigation */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '32px' }}>
-                  <button style={s.btnOutline}
-                    onClick={() => setCurrentRoomIndex(i => Math.max(0, i - 1))}
-                    disabled={currentRoomIndex === 0}>
-                    ← Anterior
-                  </button>
+                  <button style={s.btnOutline} onClick={() => setCurrentRoomIndex(i => Math.max(0, i - 1))} disabled={currentRoomIndex === 0}>← Anterior</button>
                   {currentRoomIndex < rooms.length - 1 ? (
-                    <button style={s.btnNavy}
-                      onClick={() => setCurrentRoomIndex(i => i + 1)}>
-                      Próximo cômodo →
-                    </button>
+                    <button style={s.btnNavy} onClick={() => setCurrentRoomIndex(i => i + 1)}>Próximo cômodo →</button>
                   ) : (
-                    <button style={s.btnGreen}
-                      onClick={() => setCurrentSection('items')}>
-                      Ver objetos →
-                    </button>
+                    <button style={s.btnGreen} onClick={() => setCurrentSection('items')}>Ver objetos →</button>
                   )}
                 </div>
               </div>
@@ -362,24 +300,20 @@ export default function InspectionUpload() {
           </>
         )}
 
-        {/* ITEMS SECTION */}
+        {/* ITEMS */}
         {currentSection === 'items' && (
           <>
             {items.length === 0 ? (
               <div style={{ ...s.card, textAlign: 'center', padding: '60px' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}>📦</div>
-                <p style={{ color: 'var(--muted)', marginBottom: '24px' }}>Nenhum objeto cadastrado para este imóvel</p>
-                <button style={s.btnOutline} onClick={() => navigate(`/property/${property?.id}/setup`)}>
-                  Configurar objetos
-                </button>
+                <p style={{ color: 'var(--muted)', marginBottom: '24px' }}>Nenhum objeto cadastrado</p>
+                <button style={s.btnOutline} onClick={() => navigate(`/property/${property?.id}/setup`)}>Configurar objetos</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {items.map(item => (
                   <div key={item.id} style={s.card}>
-                    <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>
-                      📦 {item.name}
-                    </h3>
+                    <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>📦 {item.name}</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginBottom: '12px' }}>
                       {(itemPhotos[item.id] || []).map(slot => (
                         <div key={slot.position}>
@@ -387,20 +321,10 @@ export default function InspectionUpload() {
                           {slot.preview ? (
                             <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1' }}>
                               <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <button onClick={() => removeItemPhoto(item.id, slot.position)}
-                                style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(192,57,43,0.9)', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }}>
-                                ✕
-                              </button>
+                              <button onClick={() => removeItemPhoto(item.id, slot.position)} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(192,57,43,0.9)', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => openFilePicker('item', item.id, slot.position)}
-                              style={{
-                                width: '100%', aspectRatio: '1', borderRadius: '10px',
-                                border: '2px dashed var(--border)', background: 'var(--cream)',
-                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                gap: '6px', cursor: 'pointer',
-                              }}>
+                            <button onClick={() => openFilePicker('item', item.id, slot.position)} style={{ width: '100%', aspectRatio: '1', borderRadius: '10px', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}>
                               <span style={{ fontSize: '22px' }}>📸</span>
                               <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Adicionar</span>
                             </button>
@@ -408,9 +332,7 @@ export default function InspectionUpload() {
                         </div>
                       ))}
                     </div>
-                    <button style={s.btnOutline} onClick={() => addItemPhoto(item.id)}>
-                      + Adicionar foto
-                    </button>
+                    <button style={s.btnOutline} onClick={() => addItemPhoto(item.id)}>+ Adicionar foto</button>
                   </div>
                 ))}
               </div>
@@ -418,17 +340,19 @@ export default function InspectionUpload() {
           </>
         )}
 
-        {/* Finish button */}
+        {/* Finish */}
         <div style={{ marginTop: '32px', padding: '24px', background: 'white', borderRadius: '16px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>Finalizar vistoria</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>
-              {roomsDone} de {totalRooms} cômodos com fotos
-            </div>
+            <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>Finalizar e analisar</div>
+            <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>{roomsDone} de {totalRooms} cômodos com fotos</div>
           </div>
           <button style={{ ...s.btnGreen, fontSize: '15px', padding: '13px 28px' }}
-            onClick={uploadAllAndFinish} disabled={finishing}>
-            {finishing ? '⏳ Enviando fotos...' : '✓ Concluir vistoria'}
+            disabled={finishing}
+            onClick={async () => {
+              await uploadAllAndFinish()
+              navigate(`/inspection/${inspectionId}/analysis`)
+            }}>
+            {finishing ? '⏳ Enviando fotos...' : '🤖 Analisar com IA →'}
           </button>
         </div>
       </div>
