@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import Navbar from '../components/Navbar'
 import { analyzeRoomPhotos, analyzeItemPhotos } from '../services/geminiAnalysis'
+import { generateInspectionReport } from '../services/generateReport'
 
 type AnalysisResult = {
   condition: 'good' | 'warning' | 'critical'
@@ -40,6 +41,7 @@ export default function InspectionAnalysis() {
   const [done, setDone] = useState(false)
   const [overallScore, setOverallScore] = useState(0)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
 
   useEffect(() => { if (inspectionId) fetchData() }, [inspectionId])
 
@@ -69,23 +71,16 @@ export default function InspectionAnalysis() {
     for (let i = 0; i < roomAnalyses.length; i++) {
       const ra = roomAnalyses[i]
       setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'analyzing' } : r))
-
       const matrixForRoom = (matrixPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
       const exitForRoom = (exitPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
-
       if (matrixForRoom.length === 0 && exitForRoom.length === 0) {
         setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] }, matrixPhotos: [], exitPhotos: [] } : r))
         continue
       }
-
       try {
         const result = await analyzeRoomPhotos(ra.room.name, matrixForRoom, exitForRoom)
         scores.push(result.score)
-        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? {
-          ...r, status: 'done', result,
-          matrixPhotos: matrixForRoom.map(p => p.url),
-          exitPhotos: exitForRoom.map(p => p.url),
-        } : r))
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result, matrixPhotos: matrixForRoom.map(p => p.url), exitPhotos: exitForRoom.map(p => p.url) } : r))
       } catch {
         setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'error' } : r))
       }
@@ -94,23 +89,16 @@ export default function InspectionAnalysis() {
     for (let i = 0; i < itemAnalyses.length; i++) {
       const ia = itemAnalyses[i]
       setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'analyzing' } : item))
-
       const matrixForItem = (matrixPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
       const exitForItem = (exitPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
-
       if (matrixForItem.length === 0 && exitForItem.length === 0) {
         setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] }, matrixPhotos: [], exitPhotos: [] } : item))
         continue
       }
-
       try {
         const result = await analyzeItemPhotos(ia.item.name, matrixForItem, exitForItem)
         scores.push(result.score)
-        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? {
-          ...item, status: 'done', result,
-          matrixPhotos: matrixForItem.map(p => p.url),
-          exitPhotos: exitForItem.map(p => p.url),
-        } : item))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result, matrixPhotos: matrixForItem.map(p => p.url), exitPhotos: exitForItem.map(p => p.url) } : item))
       } catch {
         setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'error' } : item))
       }
@@ -121,6 +109,40 @@ export default function InspectionAnalysis() {
     await supabase.from('inspections').update({ status: 'completed' }).eq('id', inspectionId)
     setAnalyzing(false)
     setDone(true)
+  }
+
+  async function handleGeneratePDF() {
+    setGeneratingPDF(true)
+    const rooms = [
+      ...roomAnalyses.filter(ra => ra.status === 'done' && ra.result).map(ra => ({
+        name: ra.room.name,
+        score: ra.result!.score,
+        condition: ra.result!.condition,
+        summary: ra.result!.summary,
+        findings: ra.result!.findings,
+        conformities: ra.result!.conformities,
+        matrixPhotos: ra.matrixPhotos || [],
+        exitPhotos: ra.exitPhotos || [],
+      })),
+      ...itemAnalyses.filter(ia => ia.status === 'done' && ia.result).map(ia => ({
+        name: ia.item.name,
+        score: ia.result!.score,
+        condition: ia.result!.condition,
+        summary: ia.result!.summary,
+        findings: ia.result!.findings,
+        conformities: ia.result!.conformities,
+        matrixPhotos: ia.matrixPhotos || [],
+        exitPhotos: ia.exitPhotos || [],
+      })),
+    ]
+    await generateInspectionReport({
+      propertyName: property?.name || 'Imóvel',
+      propertyAddress: property?.address || '',
+      inspectionDate: new Date(inspection?.created_at).toLocaleString('pt-BR'),
+      overallScore,
+      rooms,
+    })
+    setGeneratingPDF(false)
   }
 
   const getConditionColor = (condition: string) => ({
@@ -166,7 +188,6 @@ export default function InspectionAnalysis() {
     <div style={s.page}>
       <Navbar />
 
-      {/* Lightbox */}
       {lightbox && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
           onClick={() => setLightbox(null)}>
@@ -176,7 +197,6 @@ export default function InspectionAnalysis() {
       )}
 
       <div style={s.inner}>
-        {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <button onClick={() => navigate(`/inspection/${inspectionId}/upload`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--muted)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             ← Voltar para upload
@@ -191,68 +211,49 @@ export default function InspectionAnalysis() {
         {!analyzing && !done && (
           <div style={{ background: 'white', borderRadius: '20px', border: '1px solid var(--border)', padding: '56px 40px', textAlign: 'center' }}>
             <div style={{ fontSize: '56px', marginBottom: '20px' }}>🤖</div>
-            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--navy)', marginBottom: '10px' }}>
-              Pronto para analisar
-            </h2>
-            <p style={{ fontSize: '15px', color: 'var(--muted)', marginBottom: '6px' }}>
-              A IA fará uma varredura completa comparando as fotos originais com as fotos de saída.
-            </p>
-            <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '36px' }}>
-              {roomAnalyses.length} cômodo(s) e {itemAnalyses.length} objeto(s) serão analisados
-            </p>
+            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--navy)', marginBottom: '10px' }}>Pronto para analisar</h2>
+            <p style={{ fontSize: '15px', color: 'var(--muted)', marginBottom: '6px' }}>A IA fará uma varredura completa comparando as fotos originais com as fotos de saída.</p>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '36px' }}>{roomAnalyses.length} cômodo(s) e {itemAnalyses.length} objeto(s) serão analisados</p>
             <button onClick={startAnalysis} style={{ padding: '14px 36px', borderRadius: '12px', fontSize: '16px', fontWeight: 700, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(46,204,138,0.4)' }}>
               🤖 Iniciar análise com IA
             </button>
           </div>
         )}
 
-        {/* Score geral */}
+        {/* Overall score */}
         {done && (
           <div style={{ background: overallScore >= 75 ? 'var(--navy)' : overallScore >= 50 ? '#7C4F00' : '#7F1D1D', borderRadius: '20px', padding: '36px', marginBottom: '28px', color: 'white', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-            <div style={{ position: 'absolute', bottom: '-60px', left: '-20px', width: '160px', height: '160px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
             <div style={{ position: 'relative', zIndex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '24px' }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', opacity: 0.7, marginBottom: '8px' }}>
-                    Condição geral do imóvel
-                  </div>
-                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '72px', fontWeight: 800, lineHeight: 1, marginBottom: '8px' }}>
-                    {overallScore}%
-                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', opacity: 0.7, marginBottom: '8px' }}>Condição geral do imóvel</div>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '72px', fontWeight: 800, lineHeight: 1, marginBottom: '8px' }}>{overallScore}%</div>
                   <div style={{ fontSize: '16px', opacity: 0.85 }}>
                     {overallScore >= 75 ? '✅ Imóvel em boas condições' : overallScore >= 50 ? '⚠️ Imóvel com pontos de atenção' : '🚨 Imóvel com danos significativos'}
                   </div>
                 </div>
-
-                {/* Stats */}
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px 20px', textAlign: 'center', minWidth: '100px' }}>
-                    <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800 }}>{totalFindings}</div>
-                    <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>Ocorrências</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px 20px', textAlign: 'center', minWidth: '100px' }}>
-                    <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800 }}>{totalConformities}</div>
-                    <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>Conformes</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px 20px', textAlign: 'center', minWidth: '100px' }}>
-                    <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800 }}>{roomAnalyses.length + itemAnalyses.length}</div>
-                    <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>Analisados</div>
-                  </div>
+                  {[
+                    { value: totalFindings, label: 'Ocorrências' },
+                    { value: totalConformities, label: 'Conformes' },
+                    { value: roomAnalyses.length + itemAnalyses.length, label: 'Analisados' },
+                  ].map(stat => (
+                    <div key={stat.label} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px 20px', textAlign: 'center', minWidth: '100px' }}>
+                      <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800 }}>{stat.value}</div>
+                      <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>{stat.label}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              {/* Score bar */}
-              <div style={{ marginTop: '24px' }}>
-                <div style={{ height: '8px', background: 'rgba(255,255,255,0.15)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${overallScore}%`, background: overallScore >= 75 ? 'var(--green)' : overallScore >= 50 ? '#F59E0B' : '#EF4444', borderRadius: '4px', transition: 'width 1s ease' }} />
-                </div>
+              <div style={{ marginTop: '24px', height: '8px', background: 'rgba(255,255,255,0.15)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${overallScore}%`, background: overallScore >= 75 ? 'var(--green)' : overallScore >= 50 ? '#F59E0B' : '#EF4444', borderRadius: '4px', transition: 'width 1s ease' }} />
               </div>
             </div>
           </div>
         )}
 
-        {/* Analysis in progress */}
+        {/* Analyzing indicator */}
         {analyzing && !done && (
           <div style={{ background: 'white', borderRadius: '16px', border: '1px solid var(--border)', padding: '24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{ fontSize: '28px', animation: 'pulse 1.5s ease infinite' }}>🔄</div>
@@ -263,12 +264,10 @@ export default function InspectionAnalysis() {
           </div>
         )}
 
-        {/* Room analyses */}
+        {/* Rooms */}
         {(analyzing || done) && roomAnalyses.length > 0 && (
           <>
-            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px', marginTop: done ? '8px' : '0' }}>
-              🏠 Cômodos
-            </h2>
+            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>🏠 Cômodos</h2>
             {roomAnalyses.map(ra => (
               <RoomCard key={ra.room.id} name={ra.room.name} status={ra.status} result={ra.result}
                 matrixPhotos={ra.matrixPhotos || []} exitPhotos={ra.exitPhotos || []}
@@ -278,12 +277,10 @@ export default function InspectionAnalysis() {
           </>
         )}
 
-        {/* Item analyses */}
+        {/* Items */}
         {(analyzing || done) && itemAnalyses.length > 0 && (
           <>
-            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px', marginTop: '32px' }}>
-              📦 Objetos
-            </h2>
+            <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px', marginTop: '32px' }}>📦 Objetos</h2>
             {itemAnalyses.map(ia => (
               <RoomCard key={ia.item.id} name={ia.item.name} status={ia.status} result={ia.result}
                 matrixPhotos={ia.matrixPhotos || []} exitPhotos={ia.exitPhotos || []}
@@ -295,10 +292,14 @@ export default function InspectionAnalysis() {
 
         {/* Actions */}
         {done && (
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '40px' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '40px', flexWrap: 'wrap' }}>
             <button style={{ padding: '12px 24px', borderRadius: '10px', fontSize: '14px', fontWeight: 500, background: 'transparent', color: 'var(--navy)', border: '1.5px solid var(--border)', cursor: 'pointer' }}
               onClick={() => navigate('/dashboard')}>
               Voltar ao Dashboard
+            </button>
+            <button style={{ padding: '13px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, background: 'var(--navy)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: generatingPDF ? 0.7 : 1 }}
+              onClick={handleGeneratePDF} disabled={generatingPDF}>
+              {generatingPDF ? '⏳ Gerando PDF...' : '📄 Baixar Relatório PDF'}
             </button>
             <button style={{ padding: '13px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 2px 16px rgba(46,204,138,0.35)' }}
               onClick={() => navigate('/dashboard')}>
@@ -312,11 +313,8 @@ export default function InspectionAnalysis() {
 }
 
 function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick, getConditionColor, getSeverityConfig, getTypeLabel }: {
-  name: string
-  status: string
-  result?: any
-  matrixPhotos: string[]
-  exitPhotos: string[]
+  name: string; status: string; result?: any
+  matrixPhotos: string[]; exitPhotos: string[]
   onPhotoClick: (url: string) => void
   getConditionColor: (c: string) => any
   getSeverityConfig: (s: string) => any
@@ -326,7 +324,6 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
 
   return (
     <div style={{ background: 'white', borderRadius: '20px', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: '20px', boxShadow: '0 2px 12px rgba(11,45,82,0.06)' }}>
-      {/* Card header */}
       <div style={{ padding: '20px 24px', borderBottom: result ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontSize: '20px' }}>
@@ -371,7 +368,7 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
             <p style={{ fontSize: '14px', color: 'var(--navy)', lineHeight: 1.65 }}>{result.summary}</p>
           </div>
 
-          {/* Photos side by side */}
+          {/* Photos */}
           {(matrixPhotos.length > 0 || exitPhotos.length > 0) && (
             <div style={{ marginBottom: '24px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -423,12 +420,10 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                           <span style={{ fontSize: '13px', fontWeight: 700, color: sc.color }}>{getTypeLabel(f.type)}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'white', color: sc.color, border: `1px solid ${sc.border}` }}>
-                            {sc.label}
-                          </span>
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: 'white', color: sc.color, border: `1px solid ${sc.border}` }}>{sc.label}</span>
                         </div>
                         <p style={{ fontSize: '13px', color: sc.color, lineHeight: 1.5, margin: 0 }}>{f.description}</p>
-                        {f.location && <p style={{ fontSize: '11px', color: sc.color, opacity: 0.7, margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>📍 {f.location}</p>}
+                        {f.location && <p style={{ fontSize: '11px', color: sc.color, opacity: 0.7, margin: '4px 0 0' }}>📍 {f.location}</p>}
                       </div>
                     </div>
                   )
