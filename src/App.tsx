@@ -3,6 +3,7 @@ import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Welcome from './pages/Welcome'
+import PropertySetup from './pages/PropertySetup'
 import PrivateRoute from './components/PrivateRoute'
 
 export default function App() {
@@ -18,6 +19,11 @@ export default function App() {
       <Route path="/dashboard" element={
         <PrivateRoute>
           <Dashboard />
+        </PrivateRoute>
+      } />
+      <Route path="/property/:propertyId/setup" element={
+        <PrivateRoute>
+          <PropertySetup />
         </PrivateRoute>
       } />
     </Routes>

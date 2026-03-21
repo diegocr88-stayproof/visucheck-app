@@ -5,9 +5,7 @@ import { supabase } from '../supabase'
 
 type Property = { id: string; created_at: string; name: string; address: string | null; description: string | null; user_id: string }
 type Inspection = { id: string; created_at: string; property_id: string; type: 'entry' | 'exit'; status: 'pending' | 'processing' | 'completed' | 'failed'; user_id: string; report_url: string | null }
-
 type Tab = 'properties' | 'inspections'
-
 type ModalType = 'none' | 'addProperty' | 'addInspection'
 
 export default function Dashboard() {
@@ -18,23 +16,21 @@ export default function Dashboard() {
   const [inspections, setInspections] = useState<Inspection[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
-
-  // Form states
   const [propName, setPropName] = useState('')
   const [propAddress, setPropAddress] = useState('')
   const [propDesc, setPropDesc] = useState('')
   const [inspType, setInspType] = useState<'entry' | 'exit'>('entry')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
     const [{ data: props }, { data: insps }] = await Promise.all([
-      supabase.from('properties').select('*').order('created_at', { ascending: false }),
-      supabase.from('inspections').select('*').order('created_at', { ascending: false }),
+      supabase.from('properties').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('inspections').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
     ])
     setProperties(props || [])
     setInspections(insps || [])
@@ -44,11 +40,13 @@ export default function Dashboard() {
   async function handleAddProperty() {
     if (!propName.trim()) return
     setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
     const { error } = await supabase.from('properties').insert({
       name: propName,
       address: propAddress || null,
       description: propDesc || null,
-      user_id: '00000000-0000-0000-0000-000000000001', // placeholder até auth
+      user_id: user.id,
     })
     setSaving(false)
     if (!error) {
@@ -61,11 +59,13 @@ export default function Dashboard() {
   async function handleAddInspection() {
     if (!selectedPropertyId) return
     setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
     const { error } = await supabase.from('inspections').insert({
       property_id: selectedPropertyId,
       type: inspType,
       status: 'pending',
-      user_id: '00000000-0000-0000-0000-000000000001', // placeholder até auth
+      user_id: user.id,
     })
     setSaving(false)
     if (!error) {
@@ -76,10 +76,8 @@ export default function Dashboard() {
   }
 
   const getStatusLabel = (status: string) => ({
-    pending: 'Pendente',
-    processing: 'Processando',
-    completed: 'Concluída',
-    failed: 'Erro',
+    pending: 'Pendente', processing: 'Processando',
+    completed: 'Concluída', failed: 'Erro',
   }[status] || status)
 
   const getStatusColor = (status: string) => ({
@@ -92,7 +90,6 @@ export default function Dashboard() {
   const getPropertyName = (id: string) =>
     properties.find(p => p.id === id)?.name || 'Imóvel'
 
-  // ─── STYLES ───
   const s = {
     page: { minHeight: '100vh', background: 'var(--cream)' } as React.CSSProperties,
     inner: { paddingTop: '100px', paddingBottom: '80px', paddingLeft: '48px', paddingRight: '48px', maxWidth: '1200px', margin: '0 auto' } as React.CSSProperties,
@@ -112,7 +109,6 @@ export default function Dashboard() {
   return (
     <div style={s.page}>
       <Navbar />
-
       <div style={s.inner}>
 
         {/* Header */}
@@ -121,15 +117,13 @@ export default function Dashboard() {
             <h1 style={s.h1}>Dashboard</h1>
             <p style={s.sub}>Gerencie seus imóveis e vistorias</p>
           </div>
-          <button
-            style={s.btnGreen}
-            onClick={() => setModal(tab === 'properties' ? 'addProperty' : 'addInspection')}
-          >
+          <button style={s.btnGreen}
+            onClick={() => setModal(tab === 'properties' ? 'addProperty' : 'addInspection')}>
             + {tab === 'properties' ? 'Novo Imóvel' : 'Nova Vistoria'}
           </button>
         </div>
 
-        {/* Stats bar */}
+        {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
           {[
             { label: 'Imóveis', value: properties.length, icon: '🏠' },
@@ -160,7 +154,6 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Loading */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '80px', color: 'var(--muted)' }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
@@ -187,18 +180,22 @@ export default function Dashboard() {
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
                     {properties.map(p => (
-                      <div key={p.id} style={{ ...s.card, cursor: 'pointer' }}
+                      <div key={p.id} style={{ ...s.card }}
                         onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 32px rgba(11,45,82,0.12)')}
                         onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
                       >
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
                           <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--green-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>🏠</div>
-                          <button
-                            style={s.btnOutline}
-                            onClick={() => { setSelectedPropertyId(p.id); setModal('addInspection') }}
-                          >
-                            + Vistoria
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button style={s.btnOutline}
+                              onClick={() => navigate(`/property/${p.id}/setup`)}>
+                              ⚙️ Configurar
+                            </button>
+                            <button style={s.btnOutline}
+                              onClick={() => { setSelectedPropertyId(p.id); setModal('addInspection') }}>
+                              + Vistoria
+                            </button>
+                          </div>
                         </div>
                         <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '17px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{p.name}</h3>
                         {p.address && <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '4px' }}>📍 {p.address}</p>}
@@ -272,7 +269,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ─── MODAL OVERLAY ─── */}
+      {/* MODALS */}
       {modal !== 'none' && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 200,
@@ -285,12 +282,9 @@ export default function Dashboard() {
             boxShadow: '0 24px 80px rgba(11,45,82,0.25)',
           }} onClick={e => e.stopPropagation()}>
 
-            {/* ADD PROPERTY */}
             {modal === 'addProperty' && (
               <>
-                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>
-                  Novo Imóvel
-                </h2>
+                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>Novo Imóvel</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div>
                     <label style={s.label}>Nome do imóvel *</label>
@@ -314,12 +308,9 @@ export default function Dashboard() {
               </>
             )}
 
-            {/* ADD INSPECTION */}
             {modal === 'addInspection' && (
               <>
-                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>
-                  Nova Vistoria
-                </h2>
+                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: 'var(--navy)', marginBottom: '24px' }}>Nova Vistoria</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div>
                     <label style={s.label}>Imóvel *</label>
