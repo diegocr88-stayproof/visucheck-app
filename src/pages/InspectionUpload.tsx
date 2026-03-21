@@ -6,6 +6,7 @@ import Navbar from '../components/Navbar'
 type Room = { id: string; name: string; is_custom: boolean }
 type Item = { id: string; name: string }
 type PhotoSlot = { position: string; label: string; guide: string; file?: File; preview?: string }
+type MatrixPhoto = { position: string; photo_url: string; room_id: string | null; item_id: string | null }
 
 const POSITIONS = [
   { position: 'north', label: 'Canto 1', guide: 'Frente esquerda do cômodo' },
@@ -21,6 +22,7 @@ export default function InspectionUpload() {
   const [property, setProperty] = useState<any>(null)
   const [rooms, setRooms] = useState<Room[]>([])
   const [items, setItems] = useState<Item[]>([])
+  const [matrixPhotos, setMatrixPhotos] = useState<MatrixPhoto[]>([])
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0)
   const [currentSection, setCurrentSection] = useState<'rooms' | 'items'>('rooms')
   const [roomPhotos, setRoomPhotos] = useState<Record<string, PhotoSlot[]>>({})
@@ -30,9 +32,7 @@ export default function InspectionUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeSlot, setActiveSlot] = useState<{ type: 'room' | 'item'; id: string; position: string } | null>(null)
 
-  useEffect(() => {
-    if (inspectionId) fetchData()
-  }, [inspectionId])
+  useEffect(() => { if (inspectionId) fetchData() }, [inspectionId])
 
   async function fetchData() {
     setLoading(true)
@@ -43,11 +43,16 @@ export default function InspectionUpload() {
     setProperty(prop)
     const { data: roomsData } = await supabase.from('rooms').select('*').eq('property_id', insp.property_id)
     const { data: itemsData } = await supabase.from('items').select('*').eq('property_id', insp.property_id)
+    const { data: matrix } = await supabase.from('matrix_photos').select('*').eq('property_id', insp.property_id)
+
     setRooms(roomsData || [])
     setItems(itemsData || [])
+    setMatrixPhotos(matrix || [])
+
     const rPhotos: Record<string, PhotoSlot[]> = {}
     ;(roomsData || []).forEach(room => { rPhotos[room.id] = POSITIONS.map(p => ({ ...p })) })
     setRoomPhotos(rPhotos)
+
     const iPhotos: Record<string, PhotoSlot[]> = {}
     ;(itemsData || []).forEach(item => { iPhotos[item.id] = [{ position: '1', label: 'Foto 1', guide: 'Foto do objeto' }] })
     setItemPhotos(iPhotos)
@@ -75,12 +80,23 @@ export default function InspectionUpload() {
     setItemPhotos(prev => {
       const current = prev[itemId] || []
       const nextNum = current.length + 1
-      return { ...prev, [itemId]: [...current, { position: String(nextNum), label: `Foto ${nextNum}`, guide: 'Foto adicional do objeto' }] }
+      return { ...prev, [itemId]: [...current, { position: String(nextNum), label: `Foto ${nextNum}`, guide: 'Foto adicional' }] }
     })
   }
 
   function removeItemPhoto(itemId: string, position: string) {
     setItemPhotos(prev => ({ ...prev, [itemId]: prev[itemId].filter(s => s.position !== position) }))
+  }
+
+  function getMatrixPhoto(roomId: string | null, itemId: string | null, position: string): string | null {
+    return matrixPhotos.find(p =>
+      (roomId ? p.room_id === roomId : p.item_id === itemId) && p.position === position
+    )?.photo_url || null
+  }
+
+  function getMatrixItemPhoto(itemId: string, index: number): string | null {
+    const photos = matrixPhotos.filter(p => p.item_id === itemId)
+    return photos[index]?.photo_url || null
   }
 
   async function uploadAllAndFinish() {
@@ -133,7 +149,7 @@ export default function InspectionUpload() {
 
   const s = {
     page: { minHeight: '100vh', background: 'var(--cream)' } as React.CSSProperties,
-    inner: { paddingTop: '100px', paddingBottom: '80px', paddingLeft: '48px', paddingRight: '48px', maxWidth: '900px', margin: '0 auto' } as React.CSSProperties,
+    inner: { paddingTop: '100px', paddingBottom: '80px', paddingLeft: '48px', paddingRight: '48px', maxWidth: '1000px', margin: '0 auto' } as React.CSSProperties,
     card: { background: 'white', borderRadius: '20px', border: '1px solid var(--border)', padding: '32px' } as React.CSSProperties,
     btnGreen: { padding: '12px 24px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 2px 12px rgba(46,204,138,0.3)' } as React.CSSProperties,
     btnNavy: { padding: '12px 24px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, background: 'var(--navy)', color: 'white', border: 'none', cursor: 'pointer' } as React.CSSProperties,
@@ -218,73 +234,98 @@ export default function InspectionUpload() {
 
             {currentRoom && (
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>{currentRoom.name}</h2>
-                <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '24px' }}>Tire 4 fotos — uma em cada canto do cômodo</p>
+                <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>
+                  {currentRoom.name}
+                </h2>
+                <p style={{ fontSize: '14px', color: 'var(--muted)', marginBottom: '28px' }}>
+                  Tire a foto no <strong>mesmo ângulo</strong> da foto original ao lado
+                </p>
 
-                {/* Guide visual */}
-                <div style={{ background: 'var(--cream)', borderRadius: '14px', padding: '24px', marginBottom: '24px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '16px', textAlign: 'center' }}>
-                    Guia de posicionamento
-                  </div>
-                  <div style={{ position: 'relative', width: '100%', maxWidth: '280px', margin: '0 auto', aspectRatio: '1' }}>
-                    <div style={{ position: 'absolute', inset: '52px', background: 'white', border: '2.5px solid var(--navy)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ position: 'absolute', bottom: '-2.5px', left: '35%', width: '18%', height: '3px', background: 'var(--cream)' }} />
-                      <div style={{ position: 'absolute', bottom: 0, left: '35%', width: '18%', height: '12px', borderRight: '2px solid var(--navy)', borderRadius: '0 0 10px 0', background: 'transparent' }} />
-                      <div style={{ fontSize: '22px' }}>🛋️</div>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--muted)' }}>{currentRoom.name}</div>
-                      <div style={{ position: 'absolute', top: '8px', left: '8px', fontSize: '12px', color: 'var(--muted)' }}>↘</div>
-                      <div style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '12px', color: 'var(--muted)' }}>↙</div>
-                      <div style={{ position: 'absolute', bottom: '8px', left: '8px', fontSize: '12px', color: 'var(--muted)' }}>↗</div>
-                      <div style={{ position: 'absolute', bottom: '8px', right: '8px', fontSize: '12px', color: 'var(--muted)' }}>↖</div>
-                    </div>
-                    {[
-                      { pos: 'north', label: 'Canto 1', style: { top: '0px', left: '0px' }, dir: 'Frente esq.' },
-                      { pos: 'east', label: 'Canto 2', style: { top: '0px', right: '0px' }, dir: 'Frente dir.' },
-                      { pos: 'west', label: 'Canto 3', style: { bottom: '0px', left: '0px' }, dir: 'Fundo esq.' },
-                      { pos: 'south', label: 'Canto 4', style: { bottom: '0px', right: '0px' }, dir: 'Fundo dir.' },
-                    ].map(cam => {
-                      const slot = (roomPhotos[currentRoom.id] || []).find(s => s.position === cam.pos)
-                      const hasPhoto = !!slot?.file
-                      return (
-                        <div key={cam.pos} style={{ position: 'absolute', ...cam.style, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}
-                          onClick={() => openFilePicker('room', currentRoom.id, cam.pos)}>
-                          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: hasPhoto ? 'var(--green)' : 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', boxShadow: '0 4px 12px rgba(11,45,82,0.25)', transition: 'all 0.2s' }}>
-                            {hasPhoto ? '✅' : '📷'}
+                {/* 4 photo pairs */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {(roomPhotos[currentRoom.id] || []).map(slot => {
+                    const matrixUrl = getMatrixPhoto(currentRoom.id, null, slot.position)
+                    return (
+                      <div key={slot.position}>
+                        {/* Position label */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700, flexShrink: 0 }}>
+                            {slot.position === 'north' ? '1' : slot.position === 'east' ? '2' : slot.position === 'west' ? '3' : '4'}
                           </div>
-                          <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--navy)', background: 'white', padding: '1px 5px', borderRadius: '4px', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{cam.label}</div>
-                          <div style={{ fontSize: '8px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{cam.dir}</div>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--navy)' }}>{slot.label}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{slot.guide}</div>
+                          </div>
+                          {slot.file && (
+                            <span style={{ marginLeft: 'auto', fontSize: '12px', fontWeight: 600, color: 'var(--green-dark)', background: 'var(--green-glow)', padding: '3px 10px', borderRadius: '100px', border: '1px solid rgba(46,204,138,0.3)' }}>
+                              ✅ Foto tirada
+                            </span>
+                          )}
                         </div>
-                      )
-                    })}
-                  </div>
-                  <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--muted)', marginTop: '16px' }}>
-                    📷 Clique em cada câmera para tirar a foto
-                  </p>
-                </div>
 
-                {/* 4 photo slots */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                  {(roomPhotos[currentRoom.id] || []).map(slot => (
-                    <div key={slot.position}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '4px' }}>{slot.label}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' }}>{slot.guide}</div>
-                      {slot.preview ? (
-                        <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '4/3' }}>
-                          <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button onClick={() => openFilePicker('room', currentRoom.id, slot.position)} style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(11,45,82,0.8)', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}>
-                            🔄 Trocar
-                          </button>
+                        {/* Side by side: original + new */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          {/* Original photo */}
+                          <div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--navy)', display: 'inline-block' }} />
+                              Foto original
+                            </div>
+                            {matrixUrl ? (
+                              <div style={{ borderRadius: '12px', overflow: 'hidden', aspectRatio: '4/3', border: '2px solid rgba(11,45,82,0.15)', position: 'relative' }}>
+                                <img src={matrixUrl} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(11,45,82,0.8)', color: 'white', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
+                                  ORIGINAL
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ borderRadius: '12px', aspectRatio: '4/3', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' }}>
+                                <span style={{ fontSize: '24px' }}>🖼️</span>
+                                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Sem foto original</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* New photo slot */}
+                          <div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: slot.file ? 'var(--green)' : '#EF4444', display: 'inline-block' }} />
+                              Foto da vistoria
+                            </div>
+                            {slot.preview ? (
+                              <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '4/3', border: '2px solid rgba(46,204,138,0.4)' }}>
+                                <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(46,204,138,0.9)', color: 'var(--navy)', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px' }}>
+                                  VISTORIA
+                                </div>
+                                <button
+                                  onClick={() => openFilePicker('room', currentRoom.id, slot.position)}
+                                  style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(11,45,82,0.8)', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}>
+                                  🔄 Trocar
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openFilePicker('room', currentRoom.id, slot.position)}
+                                style={{
+                                  width: '100%', aspectRatio: '4/3', borderRadius: '12px',
+                                  border: '2px dashed var(--border)', background: 'var(--cream)',
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                  gap: '8px', cursor: 'pointer', transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--green)'; e.currentTarget.style.background = 'rgba(46,204,138,0.05)' }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--cream)' }}
+                              >
+                                <span style={{ fontSize: '28px' }}>📸</span>
+                                <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Tirar foto no mesmo ângulo</span>
+                                <span style={{ fontSize: '11px', color: 'var(--green-dark)', fontWeight: 600 }}>↑ Use a foto original como guia</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <button onClick={() => openFilePicker('room', currentRoom.id, slot.position)} style={{ width: '100%', aspectRatio: '4/3', borderRadius: '12px', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--navy)'; e.currentTarget.style.background = 'rgba(11,45,82,0.03)' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--cream)' }}>
-                          <span style={{ fontSize: '28px' }}>📸</span>
-                          <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Tirar / Enviar foto</span>
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '32px' }}>
@@ -311,30 +352,71 @@ export default function InspectionUpload() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {items.map(item => (
-                  <div key={item.id} style={s.card}>
-                    <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>📦 {item.name}</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                      {(itemPhotos[item.id] || []).map(slot => (
-                        <div key={slot.position}>
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--navy)', marginBottom: '6px' }}>{slot.label}</div>
-                          {slot.preview ? (
-                            <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1' }}>
-                              <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              <button onClick={() => removeItemPhoto(item.id, slot.position)} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(192,57,43,0.9)', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+                {items.map(item => {
+                  const matrixItemPhotos = matrixPhotos.filter(p => p.item_id === item.id)
+                  return (
+                    <div key={item.id} style={s.card}>
+                      <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: '18px', fontWeight: 700, color: 'var(--navy)', marginBottom: '6px' }}>
+                        📦 {item.name}
+                      </h3>
+                      <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '20px' }}>
+                        Tire fotos no mesmo ângulo das fotos originais
+                      </p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {(itemPhotos[item.id] || []).map((slot, idx) => {
+                          const matrixUrl = getMatrixItemPhoto(item.id, idx)
+                          return (
+                            <div key={slot.position}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '10px' }}>
+                                {slot.label}
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                {/* Original */}
+                                <div>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '6px' }}>
+                                    Foto original
+                                  </div>
+                                  {matrixUrl ? (
+                                    <div style={{ borderRadius: '10px', overflow: 'hidden', aspectRatio: '1', border: '2px solid rgba(11,45,82,0.15)' }}>
+                                      <img src={matrixUrl} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </div>
+                                  ) : (
+                                    <div style={{ borderRadius: '10px', aspectRatio: '1', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <span style={{ fontSize: '20px' }}>🖼️</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* New photo */}
+                                <div>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '6px' }}>
+                                    Foto da vistoria
+                                  </div>
+                                  {slot.preview ? (
+                                    <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1', border: '2px solid rgba(46,204,138,0.4)' }}>
+                                      <img src={slot.preview} alt={slot.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      <button onClick={() => removeItemPhoto(item.id, slot.position)} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(192,57,43,0.9)', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }}>✕</button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => openFilePicker('item', item.id, slot.position)} style={{ width: '100%', aspectRatio: '1', borderRadius: '10px', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}>
+                                      <span style={{ fontSize: '22px' }}>📸</span>
+                                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Tirar foto</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          ) : (
-                            <button onClick={() => openFilePicker('item', item.id, slot.position)} style={{ width: '100%', aspectRatio: '1', borderRadius: '10px', border: '2px dashed var(--border)', background: 'var(--cream)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}>
-                              <span style={{ fontSize: '22px' }}>📸</span>
-                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Adicionar</span>
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                          )
+                        })}
+                      </div>
+
+                      <button style={{ ...s.btnOutline, marginTop: '16px' }} onClick={() => addItemPhoto(item.id)}>
+                        + Adicionar ângulo
+                      </button>
                     </div>
-                    <button style={s.btnOutline} onClick={() => addItemPhoto(item.id)}>+ Adicionar foto</button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </>
@@ -346,7 +428,8 @@ export default function InspectionUpload() {
             <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>Finalizar e analisar</div>
             <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>{roomsDone} de {totalRooms} cômodos com fotos</div>
           </div>
-          <button style={{ ...s.btnGreen, fontSize: '15px', padding: '13px 28px' }}
+          <button
+            style={{ ...s.btnGreen, fontSize: '15px', padding: '13px 28px' }}
             disabled={finishing}
             onClick={async () => {
               await uploadAllAndFinish()
