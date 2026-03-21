@@ -57,7 +57,7 @@ IMPORTANTE:
 - Considere apenas objetos que voce ve com CLAREZA na foto 1
 - Nao invente objetos que nao estao visiveis
 - IGNORE diferencas de iluminacao e angulo
-- Um objeto "similar mas diferente" NAO e faltante
+- Um objeto similar mas diferente NAO e faltante
 - Apenas reporte o que tem CERTEZA
 
 Responda em JSON valido sem markdown:
@@ -70,6 +70,8 @@ Responda em JSON valido sem markdown:
 - score: 100 se identico, menos 10-15 por item faltante confirmado
 - type dos findings: "missing_item", "physical_damage" ou "stain"
 - severity: "low", "medium" ou "high"
+- description: descricao clara do objeto ausente
+- location: onde estava na foto original
 - Escreva em portugues brasileiro`
 
   try {
@@ -81,7 +83,8 @@ Responda em JSON valido sem markdown:
     const text = result.response.text()
     const clean = text.replace(/```json|```/g, '').trim()
     return JSON.parse(clean)
-  } catch {
+  } catch (error) {
+    console.error('Pair analysis error:', error)
     return { findings: [], conformities: [], score: 100 }
   }
 }
@@ -92,7 +95,6 @@ export async function analyzeRoomPhotos(
   exitPhotos: { position: string; url: string }[]
 ): Promise<AnalysisResult> {
 
-  // Monta pares por posicao
   const matrixByPos: Record<string, string> = {}
   matrixPhotos.forEach(p => { matrixByPos[p.position] = p.url })
   const exitByPos: Record<string, string> = {}
@@ -108,10 +110,13 @@ export async function analyzeRoomPhotos(
     }
   }
 
-  // Analisa cada par individualmente
-  const pairResults = await Promise.all(
-    pairs.map(pos => analyzeSinglePair(roomName, pos, matrixByPos[pos], exitByPos[pos]))
-  )
+  // Analisa cada par com delay para evitar rate limit
+  const pairResults: any[] = []
+  for (const pos of pairs) {
+    const result = await analyzeSinglePair(roomName, pos, matrixByPos[pos], exitByPos[pos])
+    pairResults.push(result)
+    await new Promise(r => setTimeout(r, 3000))
+  }
 
   // Consolida removendo duplicatas
   const allFindings: any[] = []
@@ -119,7 +124,6 @@ export async function analyzeRoomPhotos(
 
   for (const pr of pairResults) {
     for (const f of (pr.findings || [])) {
-      // Chave de deduplicacao baseada no tipo + descricao simplificada
       const key = f.type + '_' + f.description.toLowerCase().substring(0, 30)
       if (!seenDescriptions.has(key)) {
         seenDescriptions.add(key)
@@ -150,7 +154,7 @@ export async function analyzeItemPhotos(
   matrixPhotos: { url: string }[],
   exitPhotos: { url: string }[]
 ): Promise<AnalysisResult> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
 
   const matrixParts = await Promise.all(
     matrixPhotos.map(async p => ({
@@ -201,4 +205,4 @@ Escreva em portugues brasileiro.`
       findings: [], conformities: [],
     }
   }
-}// debug
+}
