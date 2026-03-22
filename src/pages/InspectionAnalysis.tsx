@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabase'
 import Navbar from '../components/Navbar'
-import { analyzeRoomPhotos, analyzeItemPhotos } from '../services/geminiAnalysis'
 import { generateInspectionReport } from '../services/generateReport'
 
 type AnalysisResult = {
@@ -16,6 +15,8 @@ type AnalysisResult = {
 type RoomAnalysis = {
   room: { id: string; name: string }
   status: 'pending' | 'analyzing' | 'done' | 'error'
+  progress: number
+  progressLabel: string
   result?: AnalysisResult
   exitPhotos?: string[]
   matrixPhotos?: string[]
@@ -24,6 +25,7 @@ type RoomAnalysis = {
 type ItemAnalysis = {
   item: { id: string; name: string }
   status: 'pending' | 'analyzing' | 'done' | 'error'
+  progress: number
   result?: AnalysisResult
   exitPhotos?: string[]
   matrixPhotos?: string[]
@@ -42,6 +44,7 @@ export default function InspectionAnalysis() {
   const [overallScore, setOverallScore] = useState(0)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [generatingPDF, setGeneratingPDF] = useState(false)
+  const progressIntervals = useRef<Record<string, any>>({})
 
   useEffect(() => { if (inspectionId) fetchData() }, [inspectionId])
 
@@ -54,9 +57,38 @@ export default function InspectionAnalysis() {
     setProperty(prop)
     const { data: rooms } = await supabase.from('rooms').select('*').eq('property_id', insp.property_id)
     const { data: items } = await supabase.from('items').select('*').eq('property_id', insp.property_id)
-    setRoomAnalyses((rooms || []).map(r => ({ room: r, status: 'pending' })))
-    setItemAnalyses((items || []).map(i => ({ item: i, status: 'pending' })))
+    setRoomAnalyses((rooms || []).map(r => ({ room: r, status: 'pending', progress: 0, progressLabel: 'Aguardando...' })))
+    setItemAnalyses((items || []).map(i => ({ item: i, status: 'pending', progress: 0, result: undefined })))
     setLoading(false)
+  }
+
+  function startProgressAnimation(id: string, labels: string[]) {
+    let step = 0
+    const steps = [
+      { progress: 10, label: labels[0] || 'Iniciando análise...' },
+      { progress: 25, label: labels[1] || 'Fotografando ambiente original...' },
+      { progress: 45, label: labels[2] || 'Analisando estado atual...' },
+      { progress: 65, label: labels[3] || 'Comparando inventários...' },
+      { progress: 80, label: labels[4] || 'Identificando divergências...' },
+      { progress: 92, label: labels[5] || 'Finalizando análise...' },
+    ]
+
+    progressIntervals.current[id] = setInterval(() => {
+      if (step < steps.length) {
+        const { progress, label } = steps[step]
+        setRoomAnalyses(prev => prev.map(r =>
+          r.room.id === id ? { ...r, progress, progressLabel: label } : r
+        ))
+        step++
+      }
+    }, 4000)
+  }
+
+  function stopProgressAnimation(id: string) {
+    if (progressIntervals.current[id]) {
+      clearInterval(progressIntervals.current[id])
+      delete progressIntervals.current[id]
+    }
   }
 
   async function startAnalysis() {
@@ -68,39 +100,104 @@ export default function InspectionAnalysis() {
 
     const scores: number[] = []
 
+    // Analisa cômodos
     for (let i = 0; i < roomAnalyses.length; i++) {
       const ra = roomAnalyses[i]
-      setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'analyzing' } : r))
+
+      setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? {
+        ...r, status: 'analyzing', progress: 5, progressLabel: 'Iniciando análise...'
+      } : r))
+
+      startProgressAnimation(ra.room.id, [
+        'Iniciando análise...',
+        'Criando inventário do estado original...',
+        'Criando inventário do estado atual...',
+        'Comparando os dois estados...',
+        'Identificando divergências...',
+        'Finalizando...',
+      ])
+
       const matrixForRoom = (matrixPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
       const exitForRoom = (exitPhotos || []).filter(p => p.room_id === ra.room.id).map(p => ({ position: p.position, url: p.photo_url }))
+
       if (matrixForRoom.length === 0 && exitForRoom.length === 0) {
-        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] }, matrixPhotos: [], exitPhotos: [] } : r))
+        stopProgressAnimation(ra.room.id)
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? {
+          ...r, status: 'done', progress: 100, progressLabel: 'Concluído',
+          result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] },
+          matrixPhotos: [], exitPhotos: [],
+        } : r))
         continue
       }
+
+      const matrixByPos: Record<string, string> = {}
+      matrixForRoom.forEach(p => { matrixByPos[p.position] = p.url })
+      const exitByPos: Record<string, string> = {}
+      exitForRoom.forEach(p => { exitByPos[p.position] = p.url })
+
       try {
-        const result = await analyzeRoomPhotos(ra.room.name, matrixForRoom, exitForRoom)
-        scores.push(result.score)
-        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done', result, matrixPhotos: matrixForRoom.map(p => p.url), exitPhotos: exitForRoom.map(p => p.url) } : r))
+        const { data, error } = await supabase.functions.invoke('analyze-inspection', {
+          body: { roomName: ra.room.name, matrixPhotos: matrixByPos, exitPhotos: exitByPos },
+        })
+
+        stopProgressAnimation(ra.room.id)
+
+        if (error) throw error
+
+        scores.push(data.score || 100)
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? {
+          ...r, status: 'done', progress: 100, progressLabel: 'Análise concluída!',
+          result: data,
+          matrixPhotos: matrixForRoom.map(p => p.url),
+          exitPhotos: exitForRoom.map(p => p.url),
+        } : r))
       } catch {
-        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'error' } : r))
+        stopProgressAnimation(ra.room.id)
+        setRoomAnalyses(prev => prev.map((r, idx) => idx === i ? {
+          ...r, status: 'error', progress: 0, progressLabel: 'Erro na análise'
+        } : r))
       }
     }
 
+    // Analisa objetos
     for (let i = 0; i < itemAnalyses.length; i++) {
       const ia = itemAnalyses[i]
-      setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'analyzing' } : item))
+      setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'analyzing', progress: 20 } : item))
+
       const matrixForItem = (matrixPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
       const exitForItem = (exitPhotos || []).filter(p => p.item_id === ia.item.id).map(p => ({ url: p.photo_url }))
+
       if (matrixForItem.length === 0 && exitForItem.length === 0) {
-        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] }, matrixPhotos: [], exitPhotos: [] } : item))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? {
+          ...item, status: 'done', progress: 100,
+          result: { score: 100, condition: 'good', summary: 'Sem fotos para comparar.', findings: [], conformities: [] },
+          matrixPhotos: [], exitPhotos: [],
+        } : item))
         continue
       }
+
+      const matrixByPos: Record<string, string> = {}
+      matrixForItem.forEach((p, idx) => { matrixByPos[String(idx + 1)] = p.url })
+      const exitByPos: Record<string, string> = {}
+      exitForItem.forEach((p, idx) => { exitByPos[String(idx + 1)] = p.url })
+
       try {
-        const result = await analyzeItemPhotos(ia.item.name, matrixForItem, exitForItem)
-        scores.push(result.score)
-        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'done', result, matrixPhotos: matrixForItem.map(p => p.url), exitPhotos: exitForItem.map(p => p.url) } : item))
+        const { data, error } = await supabase.functions.invoke('analyze-inspection', {
+          body: { roomName: ia.item.name, matrixPhotos: matrixByPos, exitPhotos: exitByPos },
+        })
+
+        if (error) throw error
+
+        scores.push(data.score || 100)
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? {
+          ...item, status: 'done', progress: 100, result: data,
+          matrixPhotos: matrixForItem.map(p => p.url),
+          exitPhotos: exitForItem.map(p => p.url),
+        } : item))
       } catch {
-        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? { ...item, status: 'error' } : item))
+        setItemAnalyses(prev => prev.map((item, idx) => idx === i ? {
+          ...item, status: 'error', progress: 0
+        } : item))
       }
     }
 
@@ -115,24 +212,14 @@ export default function InspectionAnalysis() {
     setGeneratingPDF(true)
     const rooms = [
       ...roomAnalyses.filter(ra => ra.status === 'done' && ra.result).map(ra => ({
-        name: ra.room.name,
-        score: ra.result!.score,
-        condition: ra.result!.condition,
-        summary: ra.result!.summary,
-        findings: ra.result!.findings,
-        conformities: ra.result!.conformities,
-        matrixPhotos: ra.matrixPhotos || [],
-        exitPhotos: ra.exitPhotos || [],
+        name: ra.room.name, score: ra.result!.score, condition: ra.result!.condition,
+        summary: ra.result!.summary, findings: ra.result!.findings, conformities: ra.result!.conformities,
+        matrixPhotos: ra.matrixPhotos || [], exitPhotos: ra.exitPhotos || [],
       })),
       ...itemAnalyses.filter(ia => ia.status === 'done' && ia.result).map(ia => ({
-        name: ia.item.name,
-        score: ia.result!.score,
-        condition: ia.result!.condition,
-        summary: ia.result!.summary,
-        findings: ia.result!.findings,
-        conformities: ia.result!.conformities,
-        matrixPhotos: ia.matrixPhotos || [],
-        exitPhotos: ia.exitPhotos || [],
+        name: ia.item.name, score: ia.result!.score, condition: ia.result!.condition,
+        summary: ia.result!.summary, findings: ia.result!.findings, conformities: ia.result!.conformities,
+        matrixPhotos: ia.matrixPhotos || [], exitPhotos: ia.exitPhotos || [],
       })),
     ]
     await generateInspectionReport({
@@ -169,13 +256,8 @@ export default function InspectionAnalysis() {
   const totalFindings = [...roomAnalyses, ...itemAnalyses].reduce((acc, a) => acc + (a.result?.findings.length || 0), 0)
   const totalConformities = [...roomAnalyses, ...itemAnalyses].reduce((acc, a) => acc + (a.result?.conformities.length || 0), 0)
 
-  const s = {
-    page: { minHeight: '100vh', background: 'var(--cream)' } as React.CSSProperties,
-    inner: { paddingTop: '100px', paddingBottom: '80px', paddingLeft: '48px', paddingRight: '48px', maxWidth: '960px', margin: '0 auto' } as React.CSSProperties,
-  }
-
   if (loading) return (
-    <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Navbar />
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
@@ -185,7 +267,7 @@ export default function InspectionAnalysis() {
   )
 
   return (
-    <div style={s.page}>
+    <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
       <Navbar />
 
       {lightbox && (
@@ -196,7 +278,15 @@ export default function InspectionAnalysis() {
         </div>
       )}
 
-      <div style={s.inner}>
+      <style>{`
+        .analysis-inner { padding: 100px 48px 80px; max-width: 960px; margin: 0 auto; }
+        @media (max-width: 768px) { .analysis-inner { padding: 80px 16px 60px; } }
+        @keyframes progressPulse { 0%,100% { opacity:1 } 50% { opacity:0.6 } }
+      `}</style>
+
+      <div className="analysis-inner">
+
+        {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <button onClick={() => navigate(`/inspection/${inspectionId}/upload`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--muted)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             ← Voltar para upload
@@ -204,7 +294,9 @@ export default function InspectionAnalysis() {
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800, color: 'var(--navy)', letterSpacing: '-1px', marginBottom: '4px' }}>
             Análise com IA
           </h1>
-          <p style={{ fontSize: '15px', color: 'var(--muted)' }}>{property?.name} • Vistoria de Saída • {new Date(inspection?.created_at).toLocaleDateString('pt-BR')}</p>
+          <p style={{ fontSize: '15px', color: 'var(--muted)' }}>
+            {property?.name} • Vistoria de Saída • {new Date(inspection?.created_at).toLocaleDateString('pt-BR')}
+          </p>
         </div>
 
         {/* Start button */}
@@ -212,8 +304,12 @@ export default function InspectionAnalysis() {
           <div style={{ background: 'white', borderRadius: '20px', border: '1px solid var(--border)', padding: '56px 40px', textAlign: 'center' }}>
             <div style={{ fontSize: '56px', marginBottom: '20px' }}>🤖</div>
             <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '24px', fontWeight: 800, color: 'var(--navy)', marginBottom: '10px' }}>Pronto para analisar</h2>
-            <p style={{ fontSize: '15px', color: 'var(--muted)', marginBottom: '6px' }}>A IA fará uma varredura completa comparando as fotos originais com as fotos de saída.</p>
-            <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '36px' }}>{roomAnalyses.length} cômodo(s) e {itemAnalyses.length} objeto(s) serão analisados</p>
+            <p style={{ fontSize: '15px', color: 'var(--muted)', marginBottom: '6px' }}>
+              A IA criará um inventário completo de cada ambiente e comparará com o estado original.
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '36px' }}>
+              {roomAnalyses.length} cômodo(s) e {itemAnalyses.length} objeto(s) • Cada análise leva ~30 segundos
+            </p>
             <button onClick={startAnalysis} style={{ padding: '14px 36px', borderRadius: '12px', fontSize: '16px', fontWeight: 700, background: 'var(--green)', color: 'var(--navy)', border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(46,204,138,0.4)' }}>
               🤖 Iniciar análise com IA
             </button>
@@ -253,23 +349,13 @@ export default function InspectionAnalysis() {
           </div>
         )}
 
-        {/* Analyzing indicator */}
-        {analyzing && !done && (
-          <div style={{ background: 'white', borderRadius: '16px', border: '1px solid var(--border)', padding: '24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '28px', animation: 'pulse 1.5s ease infinite' }}>🔄</div>
-            <div>
-              <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '16px', fontWeight: 700, color: 'var(--navy)' }}>Analisando com IA...</div>
-              <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>Fazendo varredura completa de cada cômodo</div>
-            </div>
-          </div>
-        )}
-
         {/* Rooms */}
         {(analyzing || done) && roomAnalyses.length > 0 && (
           <>
             <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px' }}>🏠 Cômodos</h2>
             {roomAnalyses.map(ra => (
               <RoomCard key={ra.room.id} name={ra.room.name} status={ra.status} result={ra.result}
+                progress={ra.progress} progressLabel={ra.progressLabel}
                 matrixPhotos={ra.matrixPhotos || []} exitPhotos={ra.exitPhotos || []}
                 onPhotoClick={setLightbox} getConditionColor={getConditionColor}
                 getSeverityConfig={getSeverityConfig} getTypeLabel={getTypeLabel} />
@@ -283,6 +369,7 @@ export default function InspectionAnalysis() {
             <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: '20px', fontWeight: 700, color: 'var(--navy)', marginBottom: '16px', marginTop: '32px' }}>📦 Objetos</h2>
             {itemAnalyses.map(ia => (
               <RoomCard key={ia.item.id} name={ia.item.name} status={ia.status} result={ia.result}
+                progress={ia.progress} progressLabel=""
                 matrixPhotos={ia.matrixPhotos || []} exitPhotos={ia.exitPhotos || []}
                 onPhotoClick={setLightbox} getConditionColor={getConditionColor}
                 getSeverityConfig={getSeverityConfig} getTypeLabel={getTypeLabel} />
@@ -297,7 +384,7 @@ export default function InspectionAnalysis() {
               onClick={() => navigate('/dashboard')}>
               Voltar ao Dashboard
             </button>
-            <button style={{ padding: '13px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, background: 'var(--navy)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: generatingPDF ? 0.7 : 1 }}
+            <button style={{ padding: '13px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, background: 'var(--navy)', color: 'white', border: 'none', cursor: 'pointer', opacity: generatingPDF ? 0.7 : 1 }}
               onClick={handleGeneratePDF} disabled={generatingPDF}>
               {generatingPDF ? '⏳ Gerando PDF...' : '📄 Baixar Relatório PDF'}
             </button>
@@ -312,8 +399,8 @@ export default function InspectionAnalysis() {
   )
 }
 
-function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick, getConditionColor, getSeverityConfig, getTypeLabel }: {
-  name: string; status: string; result?: any
+function RoomCard({ name, status, result, progress, progressLabel, matrixPhotos, exitPhotos, onPhotoClick, getConditionColor, getSeverityConfig, getTypeLabel }: {
+  name: string; status: string; result?: any; progress: number; progressLabel: string
   matrixPhotos: string[]; exitPhotos: string[]
   onPhotoClick: (url: string) => void
   getConditionColor: (c: string) => any
@@ -324,6 +411,8 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
 
   return (
     <div style={{ background: 'white', borderRadius: '20px', border: '1px solid var(--border)', overflow: 'hidden', marginBottom: '20px', boxShadow: '0 2px 12px rgba(11,45,82,0.06)' }}>
+
+      {/* Header */}
       <div style={{ padding: '20px 24px', borderBottom: result ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontSize: '20px' }}>
@@ -336,7 +425,7 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
             <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '17px', fontWeight: 700, color: 'var(--navy)' }}>{name}</div>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '1px' }}>
               {status === 'pending' && 'Aguardando análise...'}
-              {status === 'analyzing' && 'IA analisando...'}
+              {status === 'analyzing' && progressLabel}
               {status === 'done' && `${result?.findings?.length || 0} ocorrência(s) • ${result?.conformities?.length || 0} conforme(s)`}
               {status === 'error' && 'Erro na análise'}
             </div>
@@ -353,12 +442,27 @@ function RoomCard({ name, status, result, matrixPhotos, exitPhotos, onPhotoClick
             </div>
           </div>
         )}
-        {status === 'analyzing' && (
-          <div style={{ width: '120px', height: '6px', background: 'var(--cream)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', background: 'var(--green)', borderRadius: '3px', width: '60%', animation: 'pulse 1.5s ease infinite' }} />
-          </div>
-        )}
       </div>
+
+      {/* Progress bar */}
+      {status === 'analyzing' && (
+        <div style={{ padding: '0 24px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{progressLabel}</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--navy)' }}>{progress}%</span>
+          </div>
+          <div style={{ height: '6px', background: 'var(--cream)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: 'linear-gradient(90deg, var(--green), #1FA870)',
+              borderRadius: '3px',
+              transition: 'width 0.8s ease',
+              animation: 'progressPulse 2s ease infinite',
+            }} />
+          </div>
+        </div>
+      )}
 
       {result && (
         <div style={{ padding: '24px' }}>
