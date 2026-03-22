@@ -1,16 +1,13 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY)
+const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN
+const GITHUB_ENDPOINT = 'https://models.inference.ai.azure.com'
+const MODEL = 'gpt-4o'
 
 async function imageUrlToBase64(url: string): Promise<string> {
   const response = await fetch(url)
   const blob = await response.blob()
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1]
-      resolve(base64)
-    }
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1])
     reader.onerror = reject
     reader.readAsDataURL(blob)
   })
@@ -19,72 +16,125 @@ async function imageUrlToBase64(url: string): Promise<string> {
 export type AnalysisResult = {
   condition: 'good' | 'warning' | 'critical'
   score: number
-  findings: {
-    type: string
-    severity: string
-    description: string
-    location: string
-  }[]
+  findings: { type: string; severity: string; description: string; location: string }[]
   summary: string
   conformities: string[]
 }
 
 async function analyzeSinglePair(
   roomName: string,
-  position: string,
   matrixUrl: string,
   exitUrl: string
 ): Promise<{ findings: any[]; conformities: string[]; score: number }> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-
   const [matrixB64, exitB64] = await Promise.all([
     imageUrlToBase64(matrixUrl),
     imageUrlToBase64(exitUrl),
   ])
 
-  const prompt = `Voce e um perito em vistoria de imoveis. Analise este par de fotos do mesmo angulo do comodo "${roomName}".
+  const prompt = `Voce e um perito forense em vistoria de imoveis com 20 anos de experiencia.
 
-FOTO 1 = estado original (referencia)
-FOTO 2 = estado atual (apos uso)
+Voce recebeu DUAS fotos do MESMO angulo do comodo "${roomName}":
+- IMAGEM 1 = Estado ORIGINAL (referencia, tirada na entrada)
+- IMAGEM 2 = Estado ATUAL (tirada na saida, apos uso)
 
-Faca exatamente o seguinte:
+METODOLOGIA OBRIGATORIA:
 
-1. Olhe a FOTO 1 com atencao. Liste os objetos que consegue ver CLARAMENTE.
-2. Para cada objeto listado, verifique se ele aparece na FOTO 2.
-3. Se um objeto da FOTO 1 NAO aparece na FOTO 2 = item faltante.
+ETAPA 1 - INVENTARIO DA IMAGEM ORIGINAL:
+Examine a IMAGEM 1 com muito cuidado. Liste mentalmente TODOS os objetos visiveis:
+- Moveis: mesas, cadeiras, sofas, armarios, estantes, camas
+- Equipamentos: notebooks, monitores, TVs, radios, telefones
+- Objetos medios: capacetes, garrafas, mochilas, ferramentas
+- Objetos pequenos: copos, decoracoes, livros, papeis organizados
+- Estado das superficies: paredes, piso, teto, janelas
+- Para cada objeto: anote cor, tamanho aproximado e posicao exata
 
-IMPORTANTE:
-- Considere apenas objetos que voce ve com CLAREZA na foto 1
-- Nao invente objetos que nao estao visiveis
-- IGNORE diferencas de iluminacao e angulo
-- Um objeto similar mas diferente NAO e faltante
-- Apenas reporte o que tem CERTEZA
+ETAPA 2 - INVENTARIO DA IMAGEM ATUAL:
+Examine a IMAGEM 2 com o mesmo cuidado.
 
-Responda em JSON valido sem markdown:
+ETAPA 3 - COMPARACAO CRITICA:
+Para cada objeto identificado na IMAGEM 1:
+- Ele aparece claramente na IMAGEM 2?
+- Se SIM: esta em bom estado ou tem danos?
+- Se NAO aparece em NENHUMA parte da IMAGEM 2: e um ITEM FALTANTE
+
+REGRAS PARA EVITAR ERROS:
+1. IGNORE diferencas de iluminacao, brilho, sombras e qualidade
+2. IGNORE pequenas mudancas de posicao (objeto movido poucos centimetros)
+3. So reporte FALTANTE se tiver CERTEZA ABSOLUTA que o objeto sumiu
+4. NAO reporte objetos que podem estar fora do enquadramento
+5. Objetos similares no mesmo lugar NAO sao faltantes
+6. Antes de reportar, pergunte: "Tenho certeza que este objeto sumiu?"
+
+CRITERIOS DE SEVERIDADE:
+- high: eletronicos, equipamentos, moveis principais
+- medium: objetos uteis, decoracao de valor
+- low: pequenas decoracoes, itens de baixo valor
+
+Responda APENAS em JSON valido, sem markdown:
 {
   "score": 95,
-  "findings": [],
-  "conformities": ["objeto — presente"]
+  "findings": [
+    {
+      "type": "missing_item",
+      "severity": "high",
+      "description": "Descricao especifica do objeto (cor, tipo, tamanho)",
+      "location": "Localizacao precisa na IMAGEM 1"
+    }
+  ],
+  "conformities": [
+    "Objeto especifico — cor e tipo — presente e em bom estado"
+  ]
 }
 
-- score: 100 se identico, menos 10-15 por item faltante confirmado
-- type dos findings: "missing_item", "physical_damage" ou "stain"
-- severity: "low", "medium" ou "high"
-- description: descricao clara do objeto ausente
-- location: onde estava na foto original
-- Escreva em portugues brasileiro`
+PONTUACAO:
+- Comece com 100
+- Desconte 15-25 por item faltante de alto valor
+- Desconte 8-15 por item faltante de valor medio
+- Desconte 3-8 por item faltante pequeno
+- Desconte 5-10 por dano fisico
+- Desconte 2-5 por mancha
+- type: "missing_item", "physical_damage", "stain" ou "structural"
+- Escreva tudo em portugues brasileiro`
 
   try {
-    const result = await model.generateContent([
-      { inlineData: { mimeType: 'image/jpeg', data: matrixB64 } },
-      { inlineData: { mimeType: 'image/jpeg', data: exitB64 } },
-      { text: prompt },
-    ])
-    const text = result.response.text()
+    const response = await fetch(`${GITHUB_ENDPOINT}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '=== IMAGEM 1: ESTADO ORIGINAL ===' },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${matrixB64}` } },
+              { type: 'text', text: '=== IMAGEM 2: ESTADO ATUAL ===' },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${exitB64}` } },
+              { type: 'text', text: prompt },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+        temperature: 0.1,
+      }),
+    })
+
+    const data = await response.json()
+    console.log('GPT-4o response:', data)
+
+    const text = data.choices?.[0]?.message?.content || ''
     const clean = text.replace(/```json|```/g, '').trim()
-    return JSON.parse(clean)
+    const parsed = JSON.parse(clean)
+    return {
+      findings: parsed.findings || [],
+      conformities: parsed.conformities || [],
+      score: parsed.score || 100,
+    }
   } catch (error) {
-    console.error('Pair analysis error:', error)
+    console.error('GPT-4o analysis error:', error)
     return { findings: [], conformities: [], score: 100 }
   }
 }
@@ -110,23 +160,23 @@ export async function analyzeRoomPhotos(
     }
   }
 
-  // Analisa cada par com delay para evitar rate limit
   const pairResults: any[] = []
   for (const pos of pairs) {
-    const result = await analyzeSinglePair(roomName, pos, matrixByPos[pos], exitByPos[pos])
+    const result = await analyzeSinglePair(roomName, matrixByPos[pos], exitByPos[pos])
     pairResults.push(result)
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise(r => setTimeout(r, 1000))
   }
 
   // Consolida removendo duplicatas
   const allFindings: any[] = []
-  const seenDescriptions = new Set<string>()
+  const seenItems = new Set<string>()
 
   for (const pr of pairResults) {
     for (const f of (pr.findings || [])) {
-      const key = f.type + '_' + f.description.toLowerCase().substring(0, 30)
-      if (!seenDescriptions.has(key)) {
-        seenDescriptions.add(key)
+      const words = f.description.toLowerCase().split(' ').slice(0, 4).join('_')
+      const key = `${f.type}_${words}`
+      if (!seenItems.has(key)) {
+        seenItems.add(key)
         allFindings.push(f)
       }
     }
@@ -137,16 +187,10 @@ export async function analyzeRoomPhotos(
   const condition = avgScore >= 75 ? 'good' : avgScore >= 50 ? 'warning' : 'critical'
 
   const summary = allFindings.length > 0
-    ? `Foram identificadas ${allFindings.length} ocorrencia(s) no comodo ${roomName}.`
-    : `Comodo ${roomName} sem divergencias significativas em relacao ao estado original.`
+    ? `Foram identificadas ${allFindings.length} ocorrencia(s) no comodo ${roomName}: ${allFindings.map(f => f.description).slice(0, 2).join(', ')}${allFindings.length > 2 ? ' e outros.' : '.'}`
+    : `Comodo ${roomName} em conformidade com o estado original. Nenhuma divergencia identificada.`
 
-  return {
-    score: avgScore,
-    condition,
-    summary,
-    findings: allFindings,
-    conformities: allConformities,
-  }
+  return { score: avgScore, condition, summary, findings: allFindings, conformities: allConformities }
 }
 
 export async function analyzeItemPhotos(
@@ -154,47 +198,59 @@ export async function analyzeItemPhotos(
   matrixPhotos: { url: string }[],
   exitPhotos: { url: string }[]
 ): Promise<AnalysisResult> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  const matrixB64 = await imageUrlToBase64(matrixPhotos[0].url)
+  const exitB64 = await imageUrlToBase64(exitPhotos[0].url)
 
-  const matrixParts = await Promise.all(
-    matrixPhotos.map(async p => ({
-      inlineData: { mimeType: 'image/jpeg', data: await imageUrlToBase64(p.url) }
-    }))
-  )
+  const prompt = `Voce e um perito forense em vistoria de imoveis.
 
-  const exitParts = await Promise.all(
-    exitPhotos.map(async p => ({
-      inlineData: { mimeType: 'image/jpeg', data: await imageUrlToBase64(p.url) }
-    }))
-  )
+Analise o objeto: "${itemName}"
+- IMAGEM 1 = estado ORIGINAL
+- IMAGEM 2 = estado APOS USO
 
-  const prompt = `Voce e um perito em vistoria de imoveis.
+O objeto "${itemName}" esta presente na IMAGEM 2?
+- Se SIM: ha danos, manchas ou partes faltando?
+- Se NAO: registre como ITEM FALTANTE
 
-Analise o objeto "${itemName}":
-- Primeiras fotos = estado ORIGINAL
-- Ultimas fotos = estado ATUAL
+So reporte ausencia se tiver CERTEZA que o objeto nao aparece.
 
-Pergunta direta: O objeto "${itemName}" esta VISIVELMENTE PRESENTE nas fotos atuais?
-
-Responda apenas com JSON valido:
+JSON valido, sem markdown:
 {
   "score": 100,
   "condition": "good",
-  "summary": "Objeto presente e em bom estado.",
+  "summary": "Descricao objetiva do estado atual.",
   "findings": [],
   "conformities": ["${itemName} — presente e em bom estado"]
 }
 
-Se AUSENTE: score 0, condition "critical", finding type "missing_item" severity "high".
+Se AUSENTE: score 0, condition "critical", type "missing_item", severity "high".
 Escreva em portugues brasileiro.`
 
   try {
-    const result = await model.generateContent([
-      ...matrixParts,
-      ...exitParts,
-      { text: prompt },
-    ])
-    const text = result.response.text()
+    const response = await fetch(`${GITHUB_ENDPOINT}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `=== IMAGEM 1: ORIGINAL "${itemName}" ===` },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${matrixB64}` } },
+            { type: 'text', text: '=== IMAGEM 2: ESTADO ATUAL ===' },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${exitB64}` } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+        max_tokens: 1000,
+        temperature: 0.1,
+      }),
+    })
+
+    const data = await response.json()
+    const text = data.choices?.[0]?.message?.content || ''
     const clean = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
     return { ...parsed, conformities: parsed.conformities || [] }
